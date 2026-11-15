@@ -204,6 +204,7 @@ describe('config', () => {
   it('defaults and merge', () => {
     expect(config.load()).toEqual({
       threshold: 95,
+      threshold_weekly: 95,
       auto_switch: true,
       last_folder: '',
       login_browser: 'chrome',
@@ -224,6 +225,7 @@ describe('config', () => {
     config.save({ threshold: 80 })
     const cfg = config.load()
     expect(cfg.threshold).toBe(80)
+    expect(cfg.threshold_weekly).toBe(80)
     expect(cfg.auto_switch).toBe(true)
     expect(cfg.usage_poll_seconds).toBe(120)
   })

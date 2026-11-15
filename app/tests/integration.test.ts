@@ -165,3 +165,42 @@ describe('UserPromptSubmit', () => {
     expect(readSettings().hooks).toBeUndefined()
   })
 })
+
+describe('usesLegacyBinDir 與新舊 marker', () => {
+  const legacyCmd = (f: string): string => `"${NODE}" "C:/Users/me/.claude-switcher/bin/${f}"`
+  const newCmd = (f: string): string => `"${NODE}" "C:/Users/me/.switchpilot/bin/${f}"`
+
+  it('statusLine 指向舊路徑：true', () => {
+    writeSettings({ statusLine: { type: 'command', command: legacyCmd('statusline.cjs') } })
+    expect(integration.usesLegacyBinDir()).toBe(true)
+  })
+
+  it('只有 hook 指向舊路徑：true', () => {
+    writeSettings({
+      statusLine: { type: 'command', command: newCmd('statusline.cjs') },
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: legacyCmd('hook.cjs') }] }] }
+    })
+    expect(integration.usesLegacyBinDir()).toBe(true)
+  })
+
+  it('全是新路徑或沒有 settings：false', () => {
+    expect(integration.usesLegacyBinDir()).toBe(false)
+    writeSettings({
+      statusLine: { type: 'command', command: newCmd('statusline.cjs') },
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: newCmd('hook.cjs') }] }] }
+    })
+    expect(integration.usesLegacyBinDir()).toBe(false)
+  })
+
+  it('install 會把舊路徑項目換成新路徑，不重複', () => {
+    writeSettings({
+      statusLine: { type: 'command', command: legacyCmd('statusline.cjs') },
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: legacyCmd('hook.cjs') }] }] }
+    })
+    integration.install({ nodePath: NODE, binDir: 'C:\\Users\\me\\.switchpilot\\bin' })
+    const s = readSettings()
+    expect(s.statusLine.command).toContain('.switchpilot/bin/statusline.cjs')
+    expect(integration.usesLegacyBinDir()).toBe(false)
+    expect(s.hooks.Stop).toHaveLength(1)
+  })
+})

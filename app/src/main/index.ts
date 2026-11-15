@@ -1,3 +1,5 @@
+import { envVar } from '../shared/env'
+import { migrateAppDir, type MigrateResult } from '../core/appdirmigrate'
 import {
   app,
   net,
@@ -24,7 +26,7 @@ let controller: Controller | null = null
 let mainWin: BrowserWindow | null = null
 let disposed = false
 
-const screenshotMode = !!process.env['CLAUDE_SWITCHER_SCREENSHOT']
+const screenshotMode = !!envVar('SCREENSHOT')
 // 以 --hidden 啟動（開機自動啟動）：不顯示視窗；使用者開啟過視窗後清除
 let startedHidden = !screenshotMode && process.argv.includes('--hidden')
 let quitting = false
@@ -129,6 +131,9 @@ function syncTray(state?: AppState): void {
   }
 }
 
+// 舊版的開機自動啟動登錄值名稱，每次啟動都移除，避免開機啟動兩次
+const LEGACY_LOGIN_ITEM_NAME = 'electron.app.Claude Account Switcher'
+
 /** 開機自動啟動：未打包時不改登錄，只記 log。 */
 function applyLoginItem(enabled: boolean): void {
   if (screenshotMode) return
@@ -137,6 +142,18 @@ function applyLoginItem(enabled: boolean): void {
     return
   }
   const exe = process.env['PORTABLE_EXECUTABLE_FILE'] || process.execPath
+  if (process.platform === 'win32') {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: false,
+        name: LEGACY_LOGIN_ITEM_NAME,
+        path: exe,
+        args: ['--hidden']
+      })
+    } catch (e) {
+      console.error('移除舊開機啟動項失敗：' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
   app.setLoginItemSettings({ openAtLogin: enabled, path: exe, args: ['--hidden'] })
 }
 
@@ -163,9 +180,13 @@ function scriptsDir(): string {
 }
 
 function setupController(): Controller {
+  // 必須在任何 paths.* 呼叫或寫檔之前搬移資料夾（截圖模式不搬）
+  const appDirMigration: MigrateResult | undefined = screenshotMode ? undefined : migrateAppDir()
+  if (appDirMigration) console.log('[appdir] ' + JSON.stringify(appDirMigration))
   setSystemLocales(app.getPreferredSystemLanguages())
   const c = new Controller({
     scriptsDir: scriptsDir(),
+    appDirMigration,
     // Chromium 網路堆疊：使用 Windows 憑證存放區與系統 proxy（Node fetch 不信任攔截用根憑證）
     fetchImpl: ((input, init) => net.fetch(input as string, init as RequestInit)) as typeof fetch,
     agyFetch: ((input, init) => net.fetch(input as string, init as RequestInit)) as typeof fetch,
@@ -289,10 +310,10 @@ function createWindow(): void {
     }
   })
 
-  // 開發驗證用：設定 CLAUDE_SWITCHER_SCREENSHOT=<png 路徑> 時，載入後截圖並結束
-  const shotPath = process.env['CLAUDE_SWITCHER_SCREENSHOT']
+  // 開發驗證用：設定 SWITCHPILOT_SCREENSHOT=<png 路徑> 時，載入後截圖並結束
+  const shotPath = envVar('SCREENSHOT')
   if (shotPath) {
-    const size = (process.env['CLAUDE_SWITCHER_SCREENSHOT_SIZE'] || '').split('x').map(Number)
+    const size = (envVar('SCREENSHOT_SIZE') || '').split('x').map(Number)
     if (size.length === 2 && size[0] > 0 && size[1] > 0) mainWindow.setSize(size[0], size[1])
     mainWindow.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
@@ -313,9 +334,9 @@ function createWindow(): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    const legacy = process.env['CLAUDE_SWITCHER_SCREENSHOT_DIALOG']
+    const legacy = envVar('SCREENSHOT_DIALOG')
     const page =
-      process.env['CLAUDE_SWITCHER_SCREENSHOT_PAGE'] || (legacy ? dialogToPage(legacy) : '')
+      envVar('SCREENSHOT_PAGE') || (legacy ? dialogToPage(legacy) : '')
     mainWindow.loadFile(
       join(__dirname, '../renderer/index.html'),
       shotPath && page ? { query: { page } } : undefined
@@ -341,7 +362,7 @@ if (gotLock)
     // Set app user model id for windows
     // Windows 不設定 AppUserModelID：portable 版沒有對應的開始功能表捷徑，
     // 設了之後工作列找不到圖示而顯示白紙（2026-11-15 實測；不設時通知仍正常）
-    if (process.platform !== 'win32') electronApp.setAppUserModelId('local.claude-switcher')
+    if (process.platform !== 'win32') electronApp.setAppUserModelId('local.switchpilot')
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.

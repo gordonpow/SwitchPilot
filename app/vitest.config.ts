@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     // 系統語言來源固定為繁中，既有斷言中文的測試不受執行環境語言影響
-    env: { CLAUDE_SWITCHER_LANG: 'zh-TW' },
+    env: { SWITCHPILOT_LANG: 'zh-TW' },
     environment: 'node',
     globalSetup: ['tests/global-setup.ts'],
     // 會 spawn node／腳本的測試在全套平行執行時可能超過預設 5 秒

@@ -1,4 +1,5 @@
 // 尋找系統 node 與安裝 scripts（*.cjs、*.ps1）到 binDir。不 import electron。
+import { envVar } from '../shared/env'
 import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -17,9 +18,9 @@ function isFile(p: string): boolean {
   }
 }
 
-/** 依序：環境變數 CLAUDE_SWITCHER_NODE、`where node` 第一行、預設安裝路徑。找不到回傳 null。 */
+/** 依序：環境變數 SWITCHPILOT_NODE、`where node` 第一行、預設安裝路徑。找不到回傳 null。 */
 export function findNode(): string | null {
-  const env = process.env.CLAUDE_SWITCHER_NODE
+  const env = envVar('NODE')
   if (env && isFile(env)) return env
   try {
     const out = execFileSync('where', ['node'], {
@@ -37,12 +38,12 @@ export function findNode(): string | null {
 }
 
 /**
- * scripts 來源目錄：參數 > 環境變數 CLAUDE_SWITCHER_SCRIPTS_DIR >
+ * scripts 來源目錄：參數 > 環境變數 SWITCHPILOT_SCRIPTS_DIR >
  * 打包後 process.resourcesPath/scripts > 開發時 <cwd>/resources/scripts。
  */
 export function scriptsSourceDir(override?: string): string {
   if (override) return override
-  const env = process.env.CLAUDE_SWITCHER_SCRIPTS_DIR
+  const env = envVar('SCRIPTS_DIR')
   if (env) return env
   const res = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
   if (res) {

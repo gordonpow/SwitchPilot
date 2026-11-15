@@ -17,7 +17,7 @@ function run(name: string, args: string[], input: string, env: Record<string, st
   return spawnSync(process.execPath, [cjs(name), ...args], {
     input,
     encoding: 'utf-8',
-    env: { ...process.env, CLAUDE_SWITCHER_DISABLE_PIDMAP: '1', ...env }
+    env: { ...process.env, SWITCHPILOT_DISABLE_PIDMAP: '1', ...env }
   })
 }
 
@@ -88,8 +88,8 @@ describe('statusline.cjs', () => {
     expect(rec.five_hour).toBeNull()
   })
 
-  it('CLAUDE_SWITCHER_LANG=en 且帳號未儲存：輸出英文字樣', () => {
-    const r = run('statusline', [], JSON.stringify({ session_id: 's-en' }), { CLAUDE_SWITCHER_LANG: 'en' })
+  it('SWITCHPILOT_LANG=en 且帳號未儲存：輸出英文字樣', () => {
+    const r = run('statusline', [], JSON.stringify({ session_id: 's-en' }), { SWITCHPILOT_LANG: 'en' })
     expect(r.status).toBe(0)
     expect(r.stdout.trim()).toBe('[Unsaved] 5h -- · 7d --')
   })
@@ -102,12 +102,12 @@ describe('statusline.cjs', () => {
   })
 
   it('claude sessions 目錄存在時不做 pidmap 查詢', () => {
-    const root = process.env.CLAUDE_SWITCHER_CLAUDE_HOME as string
+    const root = process.env.SWITCHPILOT_CLAUDE_HOME as string
     fs.mkdirSync(path.join(root, 'sessions'), { recursive: true })
     const fake = path.join(__dirname, 'fixtures', 'fake-procs.cjs')
     const r = run('statusline', [], JSON.stringify({ session_id: 'sn', cwd: 'C:/x' }), {
-      CLAUDE_SWITCHER_DISABLE_PIDMAP: '',
-      CLAUDE_SWITCHER_PIDMAP_CMD: fake
+      SWITCHPILOT_DISABLE_PIDMAP: '',
+      SWITCHPILOT_PIDMAP_CMD: fake
     })
     expect(r.status).toBe(0)
     expect(fs.existsSync(path.join(pidmapDir(), 'sn.json'))).toBe(false)
@@ -117,7 +117,7 @@ describe('statusline.cjs', () => {
   it('pidmap：假查詢找到 claude，寫入 claude_pid／created／shell', () => {
     const fake = path.join(__dirname, 'fixtures', 'fake-procs.cjs')
     const input = JSON.stringify({ session_id: 'sp', cwd: 'C:/x' })
-    const r = run('statusline', [], input, { CLAUDE_SWITCHER_DISABLE_PIDMAP: '', CLAUDE_SWITCHER_PIDMAP_CMD: fake })
+    const r = run('statusline', [], input, { SWITCHPILOT_DISABLE_PIDMAP: '', SWITCHPILOT_PIDMAP_CMD: fake })
     expect(r.status).toBe(0)
     const m = readJson(path.join(pidmapDir(), 'sp.json')) as Record<string, any>
     expect(m).toMatchObject({
@@ -142,7 +142,7 @@ describe('statusline.cjs', () => {
         [
           "const fs = require('node:fs')",
           `fs.appendFileSync(${JSON.stringify(counter)}, 'x')`,
-          'const start = Number(process.env.CLAUDE_SWITCHER_PIDMAP_START_PID)',
+          'const start = Number(process.env.SWITCHPILOT_PIDMAP_START_PID)',
           'process.stdout.write(JSON.stringify([',
           `  { ProcessId: ${aliveClaude}, ParentProcessId: 1, Name: 'claude.exe', CommandLine: 'claude.exe', Created: 222 },`,
           `  { ProcessId: start, ParentProcessId: ${aliveClaude}, Name: 'node.exe', CommandLine: 'node statusline.cjs', Created: 444 }`,
@@ -150,7 +150,7 @@ describe('statusline.cjs', () => {
         ].join('\n')
       )
       const input = JSON.stringify({ session_id: 'sq', cwd: 'C:/x' })
-      const env = { CLAUDE_SWITCHER_DISABLE_PIDMAP: '', CLAUDE_SWITCHER_PIDMAP_CMD: script }
+      const env = { SWITCHPILOT_DISABLE_PIDMAP: '', SWITCHPILOT_PIDMAP_CMD: script }
       expect(run('statusline', [], input, env).status).toBe(0)
       expect(fs.readFileSync(counter, 'utf-8')).toBe('x')
       expect((readJson(path.join(pidmapDir(), 'sq.json')) as Record<string, any>).claude_pid).toBe(aliveClaude)

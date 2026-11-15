@@ -5,6 +5,7 @@ import * as accounts from './accounts'
 import * as config from './config'
 import * as paths from './paths'
 import * as storage from './storage'
+import { thresholdsFromConfig, toThresholds, type Thresholds } from './thresholds'
 
 export interface SlotLike {
   id: string
@@ -33,27 +34,31 @@ export const DEFAULT_API_BLOCK_WINDOW_S = 600
  * 依 R-5：
  * 1. exhausted_until > nowSec
  * 2. needs_relogin && rec.saved_at === slot.saved_at
- * 3. rec.ts 在 maxAgeSec 內且任一視窗 used_percentage >= threshold && (resets_at === 0 || resets_at > nowSec)
+ * 3. rec.ts 在 maxAgeSec 內且任一視窗 used_percentage >= 該視窗門檻 && (resets_at === 0 || resets_at > nowSec)
  */
 export function slotBlocked(
   slot: SlotLike,
   rec: UsageApiRecordLike | null | undefined,
   nowSec: number,
-  threshold: number,
+  threshold: number | Thresholds,
   maxAgeSec: number = DEFAULT_API_BLOCK_WINDOW_S
 ): boolean {
+  const thr = toThresholds(threshold)
   if ((slot.exhausted_until || 0) > nowSec) return true
 
   if (rec && rec.needs_relogin === true && rec.saved_at === slot.saved_at) return true
 
   if (rec && typeof rec.ts === 'number') {
     if (nowSec - rec.ts <= maxAgeSec) {
-      const windows = [rec.five_hour, rec.seven_day]
-      for (const w of windows) {
+      const windows = [
+        { w: rec.five_hour, limit: thr.five_hour },
+        { w: rec.seven_day, limit: thr.seven_day }
+      ]
+      for (const { w, limit } of windows) {
         if (!w) continue
         const used = typeof w.used_percentage === 'number' ? w.used_percentage : null
         const resetsAt = typeof w.resets_at === 'number' ? w.resets_at : 0
-        if (used !== null && Number.isFinite(used) && used >= threshold) {
+        if (used !== null && Number.isFinite(used) && used >= limit) {
           if (resetsAt === 0 || resetsAt > nowSec) {
             return true
           }
@@ -76,18 +81,22 @@ const RECOVER_MIN_GAP_S = 60
 export function exhaustedRecovered(
   slot: SlotLike,
   rec: UsageApiRecordLike | null | undefined,
-  threshold: number
+  threshold: number | Thresholds
 ): boolean {
+  const thr = toThresholds(threshold)
   const until = slot.exhausted_until || 0
   if (until <= 0 || !rec || rec.needs_relogin === true || typeof rec.ts !== 'number') return false
   // 舊版寫的標記沒有 exhausted_at（標記時間不明；until 可能是 7 天視窗的重置時間，不能用 until 回推）：
   // 只要有低於門檻的用量資料就視為恢復。新標記一律帶 exhausted_at。
   if (slot.exhausted_at && slot.exhausted_at > 0 && rec.ts < slot.exhausted_at + RECOVER_MIN_GAP_S) return false
   let seen = 0
-  for (const w of [rec.five_hour, rec.seven_day]) {
+  for (const { w, limit } of [
+    { w: rec.five_hour, limit: thr.five_hour },
+    { w: rec.seven_day, limit: thr.seven_day }
+  ]) {
     const used = w && typeof w.used_percentage === 'number' ? w.used_percentage : null
     if (used === null || !Number.isFinite(used)) continue
-    if (used >= threshold) return false
+    if (used >= limit) return false
     seen++
   }
   return seen > 0
@@ -101,17 +110,21 @@ export function slotAvailableAt(
   slot: SlotLike,
   rec: UsageApiRecordLike | null | undefined,
   nowSec: number,
-  threshold: number,
+  threshold: number | Thresholds,
   maxAgeSec: number = DEFAULT_API_BLOCK_WINDOW_S
 ): number {
+  const thr = toThresholds(threshold)
   let at = nowSec
   if ((slot.exhausted_until || 0) > at) at = slot.exhausted_until as number
   if (rec && typeof rec.ts === 'number' && nowSec - rec.ts <= maxAgeSec) {
-    for (const w of [rec.five_hour, rec.seven_day]) {
+    for (const { w, limit } of [
+      { w: rec.five_hour, limit: thr.five_hour },
+      { w: rec.seven_day, limit: thr.seven_day }
+    ]) {
       if (!w) continue
       const used = typeof w.used_percentage === 'number' ? w.used_percentage : null
       const resetsAt = typeof w.resets_at === 'number' ? w.resets_at : 0
-      if (used !== null && Number.isFinite(used) && used >= threshold && resetsAt > at) {
+      if (used !== null && Number.isFinite(used) && used >= limit && resetsAt > at) {
         at = resetsAt
       }
     }
@@ -126,14 +139,14 @@ export function slotAvailableAt(
  */
 export function claudeAvailable(
   nowSec: number = Math.floor(Date.now() / 1000),
-  threshold?: number
+  threshold?: number | Thresholds
 ): { available: boolean; reason: string } {
   const slots = accounts.listSlots()
   if (slots.length === 0) {
     return { available: true, reason: t('avail.noSaved') }
   }
 
-  const thr = threshold !== undefined ? threshold : Number(config.load().threshold) || 95
+  const thr = threshold !== undefined ? toThresholds(threshold) : thresholdsFromConfig(config.load())
   const usageDir = paths.usageApiDir()
 
   for (const slot of slots) {

@@ -1,6 +1,7 @@
 // 主程序控制器：輪詢、切換流程、登入流程、狀態推送。
 // 移植自 Python gui.py 的非 UI 邏輯。不 import electron：Notification、clipboard 等由外部注入。
 // 任何事件、log、錯誤訊息都不得包含 token。
+import { envVar } from '../shared/env'
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -13,7 +14,9 @@ import { acquireFileLock, type FileLock } from '../core/filelock'
 import * as routingMod from '../core/routing'
 import * as skillsetup from '../core/skillsetup'
 import * as config from '../core/config'
+import { thresholdsFromConfig } from '../core/thresholds'
 import * as integration from '../core/integration'
+import type { MigrateResult } from '../core/appdirmigrate'
 import * as launcherMod from '../core/launcher'
 import { withSlotLock } from '../core/lock'
 import * as login from '../core/login'
@@ -165,9 +168,9 @@ export interface CliOps {
 }
 
 const defaultCliOps = (): CliOps => {
-  const fake = process.env.CLAUDE_SWITCHER_FAKE_CLIS
+  const fake = envVar('FAKE_CLIS')
   return {
-    // 僅供畫面截圖：CLAUDE_SWITCHER_FAKE_CLIS=<ProcInfo[] 的 JSON 檔>，此時 kill／inject 不做任何事
+    // 僅供畫面截圖：SWITCHPILOT_FAKE_CLIS=<ProcInfo[] 的 JSON 檔>，此時 kill／inject 不做任何事
     listProcesses: fake
       ? async () => {
           try {
@@ -218,7 +221,7 @@ function defaultLaunchAgyLogin(): void {
   child.unref()
 }
 
-/** 僅供畫面截圖：CLAUDE_SWITCHER_FAKE_AGYCRED=<json 檔> 時用檔案當認證管理員；停用輪詢時不碰真的認證管理員。 */
+/** 僅供畫面截圖：SWITCHPILOT_FAKE_AGYCRED=<json 檔> 時用檔案當認證管理員；停用輪詢時不碰真的認證管理員。 */
 function fileCredOps(file: string): AgyCredOps {
   return {
     async read() {
@@ -270,7 +273,9 @@ export interface ControllerDeps {
   readClaudeSessions?: () => sessions.ClaudeSessionRec[]
   /** inject 前等待毫秒數（預設 800）。 */
   injectDelayMs?: number
-  /** 不啟動用量輪詢（亦可用環境變數 CLAUDE_SWITCHER_DISABLE_POLL=1）。 */
+  /** 啟動時資料夾搬移的結果（main 傳入），只用來記事件。 */
+  appDirMigration?: MigrateResult
+  /** 不啟動用量輪詢（亦可用環境變數 SWITCHPILOT_DISABLE_POLL=1）。 */
   disablePoll?: boolean
   /** 等待 claude 結束：檢查間隔與上限（毫秒）。 */
   waitIntervalMs?: number
@@ -353,6 +358,7 @@ export class Controller {
   private launcher: LauncherLike
   private notify: (title: string, body: string) => void
   private findNodeFn: () => string | null
+  private appDirMigration: MigrateResult | undefined
   private scriptsDir: string | undefined
   private pushFn: (state: AppState) => void
   private createLogin: NonNullable<ControllerDeps['createLogin']>
@@ -462,7 +468,7 @@ export class Controller {
     this.now = deps.now ?? Date.now
     this.cfg = config.load()
     setLanguage(resolveLanguage(this.cfg.language))
-    this.monitor = new Monitor(Number(this.cfg.threshold) || 95)
+    this.monitor = new Monitor(thresholdsFromConfig(this.cfg))
     this.monitor.waitTurnEnd = this.cfg.switch_mode === 'restart'
     this.poller =
       deps.poller ??
@@ -475,22 +481,23 @@ export class Controller {
     this.launcher = deps.launcher ?? launcherMod
     this.notify = deps.notify ?? (() => undefined)
     this.findNodeFn = deps.findNode ?? nodebin.findNode
+    this.appDirMigration = deps.appDirMigration
     this.scriptsDir = deps.scriptsDir
     this.pushFn = deps.push ?? (() => undefined)
     this.createLogin = deps.createLogin ?? ((o) => new login.LoginSession(o))
     this.copyText = deps.copyText
     this.alive = deps.pidAlive ?? pidAlive
-    this.pollDisabled = deps.disablePoll ?? process.env.CLAUDE_SWITCHER_DISABLE_POLL === '1'
+    this.pollDisabled = deps.disablePoll ?? envVar('DISABLE_POLL') === '1'
     this.cli = deps.cli ?? defaultCliOps()
     this.readSessionsFn = deps.readClaudeSessions ?? sessions.readClaudeSessions
     this.injectDelayMs = deps.injectDelayMs ?? 800
-    this.scanEnabled = !this.pollDisabled || !!process.env.CLAUDE_SWITCHER_FAKE_CLIS
+    this.scanEnabled = !this.pollDisabled || !!envVar('FAKE_CLIS')
     this.waitIntervalMs = deps.waitIntervalMs ?? 500
     this.waitMaxMs = deps.waitMaxMs ?? 10_000
     this.agyOps =
       deps.agyCred ??
-      (process.env.CLAUDE_SWITCHER_FAKE_AGYCRED
-        ? fileCredOps(process.env.CLAUDE_SWITCHER_FAKE_AGYCRED)
+      (envVar('FAKE_AGYCRED')
+        ? fileCredOps(envVar('FAKE_AGYCRED') as string)
         : this.pollDisabled
           ? inertCredOps
           : defaultCredOps())
@@ -581,6 +588,8 @@ export class Controller {
     } catch (e) {
       this.log('warn', t('log.scriptsInstallFailed', { error: errMsg(e) }))
     }
+    this.logAppDirMigration()
+    this.fixLegacySettingsPaths()
     try {
       this.applyLoginItemFn?.(!!this.cfg.launch_at_login)
     } catch (e) {
@@ -597,6 +606,31 @@ export class Controller {
       if (!this.pollDisabled) this.scheduleAgyPoll(3000)
       else void this.refreshAgyCurrent()
     })
+  }
+
+  /** 資料夾搬移結果寫入事件。 */
+  private logAppDirMigration(): void {
+    const m = this.appDirMigration
+    if (!m) return
+    if (m.status === 'migrated') {
+      this.log('info', t(m.junction ? 'log.appDirMigrated' : 'log.appDirMigratedNoJunction'))
+    } else if (m.status === 'failed') {
+      this.log('warn', t('log.appDirMigrateFailed', { reason: m.reason ?? '' }))
+    }
+  }
+
+  /** 已在新資料夾、但 settings.json 仍指向舊 bin 路徑時，重寫路徑。失敗只記事件。 */
+  private fixLegacySettingsPaths(): void {
+    try {
+      if (paths.appDir() !== paths.defaultAppDir()) return
+      if (!integration.usesLegacyBinDir()) return
+      const node = this.findNodeFn()
+      if (!node) return
+      integration.install({ nodePath: node, binDir: paths.binDir() })
+      this.log('info', t('log.settingsPathsFixed'))
+    } catch (e) {
+      this.log('warn', t('log.settingsPathsFixFailed', { error: errMsg(e) }))
+    }
   }
 
   async dispose(): Promise<void> {
@@ -1091,7 +1125,7 @@ export class Controller {
    * 正在等待重置（resumeAt）時：目前帳號恢復就立刻送繼續；其他帳號恢復則切過去再送繼續。
    */
   private async checkEarlyRecovery(nowSec: number): Promise<boolean> {
-    const thr = Number(this.cfg.threshold) || 95
+    const thr = thresholdsFromConfig(this.cfg)
     const cleared: string[] = []
     for (const s of accounts.listSlots()) {
       if ((s.exhausted_until || 0) <= nowSec) continue
@@ -1141,7 +1175,7 @@ export class Controller {
       const cur = accounts.currentSlotId()
       const slot = cur ? accounts.getSlot(cur) : null
       if (slot) {
-        const thr = Number(this.cfg.threshold) || 95
+        const thr = thresholdsFromConfig(this.cfg)
         const rec = readUsageApi(slot.id)
         if (slotBlocked(slot, rec, nowSec, thr, API_BLOCK_WINDOW_S)) {
           const at = slotAvailableAt(slot, rec, nowSec, thr, API_BLOCK_WINDOW_S)
@@ -1346,7 +1380,7 @@ export class Controller {
 
   private isBlocked(slot: accounts.Slot): boolean {
     const rec = readUsageApi(slot.id)
-    const thr = Number(this.cfg.threshold) || 95
+    const thr = thresholdsFromConfig(this.cfg)
     return slotBlocked(slot, rec, this.nowSec(), thr, API_BLOCK_WINDOW_S)
   }
 
@@ -1372,7 +1406,7 @@ export class Controller {
     failed: Set<string>,
     nowSec: number
   ): Promise<Result | null> {
-    const thr = Number(this.cfg.threshold) || 95
+    const thr = thresholdsFromConfig(this.cfg)
     let pick: { slot: accounts.Slot; at: number } | null = null
     for (let i = 0; i <= slots.length; i++) {
       pick = switchplan.pickEarliest(
@@ -1783,6 +1817,11 @@ export class Controller {
         if (!Number.isFinite(th)) return fail(t('err.thresholdNaN'), 'INVALID')
         next.threshold = Math.min(100, Math.max(50, th))
       }
+      if (patch.threshold_weekly !== undefined) {
+        const th = Number(patch.threshold_weekly)
+        if (!Number.isFinite(th)) return fail(t('err.thresholdNaN'), 'INVALID')
+        next.threshold_weekly = Math.min(100, Math.max(50, th))
+      }
       if (patch.auto_switch !== undefined) next.auto_switch = !!patch.auto_switch
       if (patch.last_folder !== undefined) next.last_folder = String(patch.last_folder)
       if (patch.login_browser !== undefined) {
@@ -1867,7 +1906,7 @@ export class Controller {
         this.clis = this.buildClis(this.lastScan)
       }
       if (modeChanged && this.scanEnabled) void this.scanNow()
-      this.monitor.threshold = Number(next.threshold) || 95
+      this.monitor.threshold = thresholdsFromConfig(next)
       if (patch.update_check !== undefined) {
         if (next.update_check) {
           if (!this.updateTimer) this.scheduleUpdateCheck(1000)
@@ -2651,7 +2690,7 @@ export class Controller {
       !!this.updateFetch &&
       !!this.cfg.update_check &&
       !this.pollDisabled &&
-      !process.env.CLAUDE_SWITCHER_SCREENSHOT
+      !envVar('SCREENSHOT')
     )
   }
 
@@ -3127,6 +3166,7 @@ export class Controller {
       earliestReset: allExhausted ? switchplan.earliestReset(slots, nowSec) : null,
       config: {
         threshold: Number(this.cfg.threshold),
+        threshold_weekly: thresholdsFromConfig(this.cfg).seven_day,
         auto_switch: !!this.cfg.auto_switch,
         last_folder: String(this.cfg.last_folder ?? ''),
         login_browser: this.cfg.login_browser,

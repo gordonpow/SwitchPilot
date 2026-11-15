@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import * as config from '../src/core/config'
 import * as paths from '../src/core/paths'
 import * as storage from '../src/core/storage'
+import { thresholdsFromConfig, toThresholds } from '../src/core/thresholds'
 import { useTempEnv } from './helpers'
 
 useTempEnv()
@@ -193,5 +194,43 @@ describe('config routing_enabled', () => {
     expect(config.load().routing_enabled).toBe(true)
     fs.writeFileSync(paths.configFile(), JSON.stringify({ routing_enabled: false }))
     expect(config.load().routing_enabled).toBe(false)
+  })
+})
+
+describe('config 每週門檻', () => {
+  const write = (o: object): void => {
+    fs.mkdirSync(paths.appDir(), { recursive: true })
+    fs.writeFileSync(paths.configFile(), JSON.stringify(o))
+  }
+  it('缺少 threshold_weekly 時沿用 threshold', () => {
+    write({ threshold: 80 })
+    const c = config.load()
+    expect(c.threshold).toBe(80)
+    expect(c.threshold_weekly).toBe(80)
+  })
+  it('預設皆為 95', () => {
+    const c = config.load()
+    expect(c.threshold_weekly).toBe(95)
+  })
+  it('有 threshold_weekly 時各自獨立；不合法則沿用 threshold；超出範圍夾住', () => {
+    write({ threshold: 80, threshold_weekly: 60 })
+    expect(config.load().threshold_weekly).toBe(60)
+    write({ threshold: 80, threshold_weekly: 'x' })
+    expect(config.load().threshold_weekly).toBe(80)
+    write({ threshold: 80, threshold_weekly: 10 })
+    expect(config.load().threshold_weekly).toBe(50)
+  })
+})
+
+describe('thresholds 工具', () => {
+  it('toThresholds / thresholdsFromConfig', () => {
+    expect(toThresholds(90)).toEqual({ five_hour: 90, seven_day: 90 })
+    expect(toThresholds({ five_hour: 70, seven_day: 80 })).toEqual({ five_hour: 70, seven_day: 80 })
+    expect(thresholdsFromConfig({})).toEqual({ five_hour: 95, seven_day: 95 })
+    expect(thresholdsFromConfig({ threshold: 80 })).toEqual({ five_hour: 80, seven_day: 80 })
+    expect(thresholdsFromConfig({ threshold: 80, threshold_weekly: 60 })).toEqual({
+      five_hour: 80,
+      seven_day: 60
+    })
   })
 })

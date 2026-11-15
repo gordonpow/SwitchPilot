@@ -154,3 +154,19 @@ describe('Monitor 不重啟模式', () => {
     expect(m.tick(NOW + 32, 'a', usage({ five: 10, ts: NOW + 32 }), [late]).kind).toBe('switch_now')
   })
 })
+
+describe('Monitor 分開門檻', () => {
+  it('5 小時與每週各依自己的門檻', () => {
+    const m = new Monitor({ five_hour: 90, seven_day: 60 })
+    m.reset(0)
+    expect(m.tick(NOW, 'a', usage({ five: 85, seven: 55 }), []).kind).toBe('none')
+    expect(m.tick(NOW, 'a', usage({ five: 85, seven: 65 }), []).kind).toBe('pending')
+    const m2 = new Monitor({ five_hour: 90, seven_day: 60 })
+    m2.reset(0)
+    expect(m2.tick(NOW, 'a', usage({ five: 91, seven: 10 }), []).kind).toBe('pending')
+  })
+  it('數字門檻兩個視窗相同', () => {
+    const m = new Monitor(80)
+    expect(m.threshold).toEqual({ five_hour: 80, seven_day: 80 })
+  })
+})

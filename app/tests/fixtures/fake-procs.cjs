@@ -1,5 +1,5 @@
 // 假的程序查詢：模擬 claude -> bash -> node（statusline）的程序鏈，輸出 JSON。
-const start = Number(process.env.CLAUDE_SWITCHER_PIDMAP_START_PID)
+const start = Number((process.env.SWITCHPILOT_PIDMAP_START_PID || process.env.CLAUDE_SWITCHER_PIDMAP_START_PID))
 const procs = [
   { ProcessId: 4001, ParentProcessId: 1, Name: 'powershell.exe', CommandLine: 'powershell.exe', Created: 111 },
   { ProcessId: 4002, ParentProcessId: 4001, Name: 'claude.exe', CommandLine: 'claude.exe', Created: 222 },

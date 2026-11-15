@@ -106,9 +106,9 @@ describe('switcher-run.cjs', () => {
       const child = spawn(process.execPath, args, {
         env: {
           ...process.env,
-          CLAUDE_SWITCHER_TEST: '1',
-          CLAUDE_SWITCHER_FAKE_AGYCRED: credFile(),
-          CLAUDE_SWITCHER_FAKE_PROCS: f('procs.json'),
+          SWITCHPILOT_TEST: '1',
+          SWITCHPILOT_FAKE_AGYCRED: credFile(),
+          SWITCHPILOT_FAKE_PROCS: f('procs.json'),
           FAKE_AGY_LOG: agyLog(),
           FAKE_AGY_COUNTER: f('agy.counter'),
           ...env
@@ -480,7 +480,7 @@ describe('switcher-run.cjs', () => {
   it('無效 role、缺少提示檔、非測試環境用 --agy 都是 exit 2', async () => {
     expect((await run([], {}, { role: 'nope' })).code).toBe(2)
     expect((await run([], {}, { promptPath: f('missing.txt') })).code).toBe(2)
-    const r = await run([], { CLAUDE_SWITCHER_TEST: '' })
+    const r = await run([], { SWITCHPILOT_TEST: '' })
     expect(r.code).toBe(2)
     expect(calls()).toHaveLength(0)
   })
@@ -571,7 +571,7 @@ describe('switcher-run.cjs', () => {
     addSlot('aaaaaa', 'a@x.com')
     addSlot('bbbbbb', 'b@x.com')
     setActive('a@x.com')
-    const r = await run([], { FAKE_AGY_MODE: 'sleep', CLAUDE_SWITCHER_RUN_TIMEOUT_MS: '800' })
+    const r = await run([], { FAKE_AGY_MODE: 'sleep', SWITCHPILOT_RUN_TIMEOUT_MS: '800' })
     expect(r.code).toBe(10)
     expect(r.result.attempts[0].outcome).toBe('timeout')
     expect(calls()).toHaveLength(1)
@@ -597,6 +597,7 @@ describe('switcher-run.cjs', () => {
     expect(r.result.status).toBe('delegate')
     expect(r.result.provider).toBe('claude')
     expect(r.result.model).toBe('haiku')
+    expect(r.result.message).toContain('disabled in SwitchPilot')
     expect(r.result.attempts).toEqual([])
     expect(calls()).toHaveLength(0)
   })

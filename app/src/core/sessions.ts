@@ -1,5 +1,6 @@
 // 偵測執行中的 claude CLI 與其 session／父 shell，並產生接續指令。
 // 純邏輯 + 可注入的程序列表；不 import electron（statusline 腳本也會打包本檔）。
+import { envVar } from '../shared/env'
 import { t } from '../shared/i18n'
 import { execFile, execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
@@ -148,20 +149,20 @@ export function listProcesses(): Promise<ProcInfo[]> {
 
 /**
  * 同步版（statusline 腳本用，逾時 5 秒）。
- * 環境變數：CLAUDE_SWITCHER_DISABLE_PIDMAP=1 直接回傳空陣列；
- * CLAUDE_SWITCHER_PIDMAP_CMD=<腳本路徑> 改用 node 執行該腳本取代 PowerShell
- * （腳本從 CLAUDE_SWITCHER_PIDMAP_START_PID 取得起點 pid，輸出同 PS_PROC_QUERY 的 JSON）。
+ * 環境變數：SWITCHPILOT_DISABLE_PIDMAP=1 直接回傳空陣列；
+ * SWITCHPILOT_PIDMAP_CMD=<腳本路徑> 改用 node 執行該腳本取代 PowerShell
+ * （腳本從 SWITCHPILOT_PIDMAP_START_PID 取得起點 pid，輸出同 PS_PROC_QUERY 的 JSON）。
  */
 export function listProcessesSync(startPid: number): ProcInfo[] {
-  if (process.env.CLAUDE_SWITCHER_DISABLE_PIDMAP === '1') return []
+  if (envVar('DISABLE_PIDMAP') === '1') return []
   try {
-    const fake = process.env.CLAUDE_SWITCHER_PIDMAP_CMD
+    const fake = envVar('PIDMAP_CMD')
     const out = fake
       ? execFileSync(process.execPath, [fake], {
           windowsHide: true,
           timeout: 5000,
           encoding: 'utf8',
-          env: { ...process.env, CLAUDE_SWITCHER_PIDMAP_START_PID: String(startPid) },
+          env: { ...process.env, SWITCHPILOT_PIDMAP_START_PID: String(startPid) },
           stdio: ['ignore', 'pipe', 'ignore']
         })
       : execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psAncestorQuery(startPid)], {

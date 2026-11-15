@@ -2,10 +2,12 @@
 // 用法：switcher-run.cjs --role R --prompt FILE --out FILE --cwd DIR [--allow CMD]... [--dry-run] [--agy PATH]
 // 最後一行 stdout 為結果 JSON。exit code：ok=0、failed=1、參數錯誤=2、delegate=10。
 // 不做任何網路請求；額度只讀 GUI 寫的快取。token、blob 不得輸出。
+import { envVar } from '../shared/env'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { spawn } from 'node:child_process'
 import * as paths from '../core/paths'
+import { thresholdsFromConfig } from '../core/thresholds'
 import * as storage from '../core/storage'
 import { acquireFileLock, type FileLock } from '../core/filelock'
 import { loadRouting, maxConcurrent, ROLE_IDS, type RoleId, type RouteEntry } from '../core/routing'
@@ -35,7 +37,7 @@ const LOW_REMAINING = 0.01
 const QUOTA_RE = /RESOURCE_EXHAUSTED|rateLimitExceeded|(?:HTTP|status)\s*429|code:\s*429|quota exceeded/i
 const STDERR_CAP = 1024 * 1024
 
-const IS_TEST = process.env.CLAUDE_SWITCHER_TEST === '1'
+const IS_TEST = envVar('TEST') === '1'
 
 interface Args {
   role: RoleId
@@ -116,7 +118,7 @@ function parseArgs(argv: string[]): Args {
   }
 }
 
-// ---- 測試用替身（只在 CLAUDE_SWITCHER_TEST=1 時生效） ----
+// ---- 測試用替身（只在 SWITCHPILOT_TEST=1 時生效） ----
 
 function fakeCredOps(file: string): AgyCredOps {
   return {
@@ -135,12 +137,12 @@ function fakeCredOps(file: string): AgyCredOps {
 }
 
 function credOps(): AgyCredOps {
-  const fake = process.env.CLAUDE_SWITCHER_FAKE_AGYCRED
+  const fake = envVar('FAKE_AGYCRED')
   return IS_TEST && fake ? fakeCredOps(fake) : defaultCredOps()
 }
 
 async function procs(): Promise<ProcInfo[]> {
-  const fake = process.env.CLAUDE_SWITCHER_FAKE_PROCS
+  const fake = envVar('FAKE_PROCS')
   if (IS_TEST && fake) {
     const v = storage.readJson(fake, []) as unknown
     return Array.isArray(v) ? (v as ProcInfo[]) : []
@@ -236,8 +238,8 @@ function runAgy(
   onSpawn?: (childPid: number) => void
 ): Promise<AgyRun> {
   const timeoutMs =
-    IS_TEST && Number(process.env.CLAUDE_SWITCHER_RUN_TIMEOUT_MS) > 0
-      ? Number(process.env.CLAUDE_SWITCHER_RUN_TIMEOUT_MS)
+    IS_TEST && Number(envVar('RUN_TIMEOUT_MS')) > 0
+      ? Number(envVar('RUN_TIMEOUT_MS'))
       : DEFAULT_TIMEOUT_MS
   const bin = args.agy ?? whichFirst(['agy.exe']) ?? 'agy'
   const isScript = /\.(c|m)?js$/i.test(bin)
@@ -536,14 +538,14 @@ async function dispatch(args: Args): Promise<Result> {
       provider: 'claude',
       model,
       attempts: [],
-      message: 'model routing is disabled in Claude Account Switcher; use a Claude subagent'
+      message: 'model routing is disabled in SwitchPilot; use a Claude subagent'
     }
   }
 
   const attempts: Attempt[] = []
   for (const entry of routing.roles[args.role]) {
     if (entry.provider === 'claude') {
-      const thr = Number(config.load().threshold) || 95
+      const thr = thresholdsFromConfig(config.load())
       const avail = claudeAvailable(nowSec(), thr)
       if (!avail.available) {
         attempts.push({ provider: 'claude', model: entry.model, outcome: 'claude_exhausted' })

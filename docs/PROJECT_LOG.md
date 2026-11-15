@@ -1,17 +1,17 @@
-# 專案紀錄：Claude 帳號切換器
+# 專案紀錄：SwitchPilot（原 Claude 帳號切換器）
 
 ## 專案介紹
 
-- **名稱**：Claude 帳號切換器（Switching_account）
+- **名稱**：SwitchPilot（v1.2.0 起；原名 Claude 帳號切換器／Claude Account Switcher）
 - **目標**：管理多個 Claude Code 訂閱帳號、一次看到所有帳號用量；一個帳號的 5 小時或每週額度用完時，自動切換到另一個帳號，並以 `claude --continue` 接續原本的對話。
 - **技術**：
   - 目前版本 `app/`：Electron 44 + React 19 + Vite 8 + Tailwind CSS 4 + shadcn/ui（TypeScript），Node v26；vitest；electron-builder portable exe。
   - 舊版 `switcher/`：Python 3.13 + tkinter（保留備援）。
-- **Repo**：https://github.com/gordonpow/Switching_account（公開；本機 `C:\presonal_project\Switching_account`）。agy 執行紀錄（`*.agy.log`）與 `img/` 截圖含帳號資訊，列入 `.gitignore`。
+- **Repo**：https://github.com/gordonpow/SwitchPilot（2026-11-16 由 Switching_account 改名，舊網址轉址；公開；本機 `C:\presonal_project\Switching_account`）。agy 執行紀錄（`*.agy.log`）與 `img/` 截圖含帳號資訊，列入 `.gitignore`。
 - **架構重點**：
-  - 帳號 slot 存在 `%USERPROFILE%\.claude-switcher\slots\`，切換時替換 `~/.claude/.credentials.json` 與 `~/.claude.json` 的 `oauthAccount`；兩版共用相同檔案格式。
+  - 帳號 slot 存在 `%USERPROFILE%\.switchpilot\slots\`（v1.2.0 起；舊 `.claude-switcher` 自動搬移並留 junction），切換時替換 `~/.claude/.credentials.json` 與 `~/.claude.json` 的 `oauthAccount`；兩版共用相同檔案格式。
   - 所有帳號用量：以各帳號 token 呼叫未公開的 `api/oauth/usage`；非使用中帳號 token 由程式 refresh，使用中帳號交給 Claude Code。
-  - statusline 腳本寫入 `rate_limits`；`Stop`／`StopFailure` hook 寫入回合結束與額度錯誤事件；腳本以系統 node 執行（`~/.claude-switcher/bin/*.cjs`）。
+  - statusline 腳本寫入 `rate_limits`；`Stop`／`StopFailure` hook 寫入回合結束與額度錯誤事件；腳本以系統 node 執行（`~/.switchpilot/bin/*.cjs`）。
   - runner 在 Windows Terminal 中託管 claude，切換時以 `--continue` 重開。
   - 文件：`docs/work/account-switcher/`、`google-login/`（Python 版）、`electron-rewrite/`（目前版本）。
 
@@ -19,6 +19,7 @@
 
 ### 已發布
 
+- **v1.2.0 預覽版**（2026-11-16）：改名 SwitchPilot（資料夾搬移、環境變數 `SWITCHPILOT_*`、repo 改名）、5 小時／每週門檻分開設定。commit 與資產見對話紀錄。
 - **v1.1.2 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.2 ，commit `df7e0ab`，資產 `Claude-Account-Switcher-1.1.2.exe`（SHA-256 `c6e3ead4…26a3`）。舊版用完標記在額度恢復後不清除的修正。
 - **v1.1.1 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.1 ，commit `58dcd07`，資產 `Claude-Account-Switcher-1.1.1.exe`（SHA-256 `7e00aa4c…ffdb`，與 GitHub `digest` 一致）。額度提前恢復（重置卡）自動解除標記並切換。
 - **v1.1.0 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.0 ，commit `638eaa9`，資產 `Claude-Account-Switcher-1.1.0.exe`（SHA-256 `0e677bcc…67f2`，與 GitHub `digest` 一致）。自動更新、模型分工設定引導、全部用完換到最早重置帳號、工作列圖示修正。
@@ -92,3 +93,11 @@
 - 使用者回報：中途用重置卡後用完標記不會消失、也不會自動切換（`docs/work/early-reset/`）→ 用量 API 顯示已低於門檻（資料晚於標記 60 秒以上）時自動清除標記；live 模式下目前帳號恢復則送繼續，其他帳號恢復且目前帳號仍被擋則切過去並送繼續（不需事先排程，App 重啟後也有效）。Sonnet 實作、主導者補沒有排程的情境。
 - 使用者要求發布 → commit `58dcd07`、發布 v1.1.1 預覽版（1.1.0 使用者可由此實測自動更新）。
 - 使用者實測 v1.1.1 用重置卡仍不切換 → 查真實資料：F115112109 的標記為舊版所寫（無 `exhausted_at`、until 為 11/19 的 7 天重置），推算的標記時間在未來導致永不清除。修正後發布 v1.1.2。
+
+### 2026-11-16
+
+- 使用者要求寫 Threads 串文（一篇）→ 提供約 300 字繁中貼文（功能重點＋repo 連結）。
+- 使用者要求名稱不綁定 Claude／Gemini，並整理常用 AI 的登入方式與剩餘用量 → Haiku 子代理查資料：Codex CLI（`~/.codex/auth.json`，`/status` 顯示 5 小時／每週）、Copilot CLI（認證管理員 `copilot-cli`，premium requests 每月）、Cursor CLI、Kiro CLI（每月 credits）；Gemini CLI 已被 Antigravity CLI 取代、Qwen OAuth 免費層已關閉。建議下一步支援 Codex 與 Copilot（另案）。
+- 使用者選擇「全部改（含 repo 與資料夾）」、名稱 SwitchPilot（`docs/work/rename-switchpilot/`）→ 介面／exe／appId 改名；`~/.claude-switcher` 啟動時搬到 `~/.switchpilot` 並留 junction（失敗沿用舊資料夾、下次再試；殘留舊資料夾改名保留後補 junction）；每次啟動把 settings.json 中舊 bin 路徑改寫；環境變數 `SWITCHPILOT_*`（舊名後備）；移除舊開機啟動登錄值；updater 改新 repo 並接受新舊資產名。規格審查 7 條全採用；Sonnet 實作；實作審查無高、採用 3 條。
+- 使用者要求 5 小時與每週門檻分開調整（`docs/work/split-threshold/`）→ 新增 `threshold_weekly`（缺少時沿用 `threshold`；Python 版只讀 `threshold` 不受影響），自動切換、可用性、最早可用、重置卡恢復、switcher-run 全部依視窗門檻；設定頁兩個滑桿、用量條依視窗門檻上色。Sonnet 實作。typecheck 通過、612 個測試通過。
+- 使用者同意改 repo 名稱並發布 v1.2.0。

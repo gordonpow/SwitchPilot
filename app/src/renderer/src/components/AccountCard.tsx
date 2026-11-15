@@ -19,6 +19,7 @@ import { UsageBar } from './UsageBar'
 interface Props {
   account: AccountView
   threshold: number
+  thresholdWeekly: number
   now: number
   busy: boolean
   onSwitch: () => void
@@ -30,6 +31,7 @@ interface Props {
 export function AccountCard({
   account: a,
   threshold,
+  thresholdWeekly,
   now,
   busy,
   onSwitch,
@@ -111,7 +113,7 @@ export function AccountCard({
 
         <div className={cn('space-y-3 transition-opacity', u.stale && 'opacity-50')}>
           <UsageBar label={t('usage.fiveHour')} window={u.five_hour} threshold={threshold} />
-          <UsageBar label={t('usage.sevenDay')} window={u.seven_day} threshold={threshold} />
+          <UsageBar label={t('usage.sevenDay')} window={u.seven_day} threshold={thresholdWeekly} />
         </div>
 
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">

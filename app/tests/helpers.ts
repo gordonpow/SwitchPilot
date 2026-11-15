@@ -5,7 +5,7 @@ import { afterEach, beforeEach } from 'vitest'
 import * as paths from '../src/core/paths'
 import * as storage from '../src/core/storage'
 
-const KEYS = ['CLAUDE_SWITCHER_HOME', 'CLAUDE_SWITCHER_CLAUDE_HOME', 'CLAUDE_SWITCHER_CLAUDE_JSON']
+const KEYS = ['SWITCHPILOT_HOME', 'SWITCHPILOT_CLAUDE_HOME', 'SWITCHPILOT_CLAUDE_JSON']
 
 /** 每個測試使用暫存目錄與環境變數，結束後還原。回傳 root 的取得函式。 */
 export function useTempEnv(): () => string {
@@ -14,9 +14,9 @@ export function useTempEnv(): () => string {
   beforeEach(() => {
     saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]))
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'sw-test-'))
-    process.env.CLAUDE_SWITCHER_HOME = path.join(root, 'app')
-    process.env.CLAUDE_SWITCHER_CLAUDE_HOME = path.join(root, 'claude')
-    process.env.CLAUDE_SWITCHER_CLAUDE_JSON = path.join(root, 'claude.json')
+    process.env.SWITCHPILOT_HOME = path.join(root, 'app')
+    process.env.SWITCHPILOT_CLAUDE_HOME = path.join(root, 'claude')
+    process.env.SWITCHPILOT_CLAUDE_JSON = path.join(root, 'claude.json')
     fs.mkdirSync(path.join(root, 'claude'), { recursive: true })
   })
   afterEach(() => {

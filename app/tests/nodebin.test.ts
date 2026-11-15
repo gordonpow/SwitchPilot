@@ -50,25 +50,25 @@ describe('installScripts', () => {
   it('source dir override and missing source', () => {
     const src = path.join(root(), 'nope')
     expect(() => installScripts({ sourceDir: src, binDir: path.join(root(), 'o') })).toThrow()
-    process.env.CLAUDE_SWITCHER_SCRIPTS_DIR = 'X:/scripts'
+    process.env.SWITCHPILOT_SCRIPTS_DIR = 'X:/scripts'
     try {
       expect(scriptsSourceDir()).toBe('X:/scripts')
       expect(scriptsSourceDir('Y:/s')).toBe('Y:/s')
     } finally {
-      delete process.env.CLAUDE_SWITCHER_SCRIPTS_DIR
+      delete process.env.SWITCHPILOT_SCRIPTS_DIR
     }
   })
 })
 
 describe('findNode', () => {
-  it('honors CLAUDE_SWITCHER_NODE', () => {
+  it('honors SWITCHPILOT_NODE', () => {
     const f = path.join(root(), 'fake-node.exe')
     fs.writeFileSync(f, '')
-    process.env.CLAUDE_SWITCHER_NODE = f
+    process.env.SWITCHPILOT_NODE = f
     try {
       expect(findNode()).toBe(f)
     } finally {
-      delete process.env.CLAUDE_SWITCHER_NODE
+      delete process.env.SWITCHPILOT_NODE
     }
   })
 })

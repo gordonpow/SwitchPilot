@@ -8,7 +8,7 @@ import * as paths from '../src/core/paths'
 import { Controller, type ControllerDeps } from '../src/main/controller'
 import { useTempEnv } from './helpers'
 
-const REPO = 'gordonpow/Switching_account'
+const REPO = 'gordonpow/SwitchPilot'
 const EXE_BYTES = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2000, 7)])
 const SHA = crypto.createHash('sha256').update(EXE_BYTES).digest('hex')
 
@@ -22,7 +22,7 @@ interface Rel {
 
 function releaseJson(r: Rel): Record<string, unknown> {
   const ver = r.tag.replace(/^v/, '')
-  const name = `Claude-Account-Switcher-${ver}.exe`
+  const name = `SwitchPilot-${ver}.exe`
   const asset: Record<string, unknown> = {
     name,
     size: r.size ?? EXE_BYTES.length,
@@ -149,14 +149,14 @@ describe('Controller 自動更新', () => {
     await vi.advanceTimersByTimeAsync(700_000)
     expect(f2).not.toHaveBeenCalled()
 
-    process.env.CLAUDE_SWITCHER_SCREENSHOT = 'x.png'
+    process.env.SWITCHPILOT_SCREENSHOT = 'x.png'
     try {
       const f3 = makeFetch(() => [])
       makeScheduled({ updateFetch: f3 as unknown as typeof fetch }).start()
       await vi.advanceTimersByTimeAsync(700_000)
       expect(f3).not.toHaveBeenCalled()
     } finally {
-      delete process.env.CLAUDE_SWITCHER_SCREENSHOT
+      delete process.env.SWITCHPILOT_SCREENSHOT
     }
   })
 
@@ -168,7 +168,7 @@ describe('Controller 自動更新', () => {
     const u = c.getState().update
     expect(u.available).toBe(true)
     expect(u.latest?.version).toBe('1.1.0')
-    expect(u.latest?.assetName).toBe('Claude-Account-Switcher-1.1.0.exe')
+    expect(u.latest?.assetName).toBe('SwitchPilot-1.1.0.exe')
     expect(u.latest?.hasHash).toBe(true)
     expect(u.current).toBe('1.0.0')
     expect(u.checkedAt).not.toBeNull()
@@ -241,7 +241,7 @@ describe('Controller 自動更新', () => {
     const u = c.getState().update
     expect(u.download.state).toBe('ready')
     expect(u.canApply).toBe(true)
-    const file = path.join(paths.updatesDir(), 'Claude-Account-Switcher-1.1.0.exe')
+    const file = path.join(paths.updatesDir(), 'SwitchPilot-1.1.0.exe')
     expect(fs.readFileSync(file).equals(EXE_BYTES)).toBe(true)
     expect(fs.existsSync(file + '.part')).toBe(false)
 
@@ -381,16 +381,16 @@ describe('Controller 自動更新', () => {
     const dir = paths.updatesDir()
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(path.join(dir, 'old.exe.part'), 'x')
-    fs.writeFileSync(path.join(dir, 'Claude-Account-Switcher-0.9.0.exe'), EXE_BYTES)
-    fs.writeFileSync(path.join(dir, 'Claude-Account-Switcher-1.1.0.exe'), EXE_BYTES)
+    fs.writeFileSync(path.join(dir, 'SwitchPilot-0.9.0.exe'), EXE_BYTES)
+    fs.writeFileSync(path.join(dir, 'SwitchPilot-1.1.0.exe'), EXE_BYTES)
     fs.writeFileSync(path.join(dir, 'update.log'), 'log')
     const c = make({ updateFetch: makeFetch(() => [{ tag: 'v1.1.0' }]) as unknown as typeof fetch })
     c.start()
     expect(fs.existsSync(path.join(dir, 'old.exe.part'))).toBe(false)
-    expect(fs.existsSync(path.join(dir, 'Claude-Account-Switcher-0.9.0.exe'))).toBe(true)
+    expect(fs.existsSync(path.join(dir, 'SwitchPilot-0.9.0.exe'))).toBe(true)
     await c.checkUpdate()
-    expect(fs.existsSync(path.join(dir, 'Claude-Account-Switcher-0.9.0.exe'))).toBe(false)
-    expect(fs.existsSync(path.join(dir, 'Claude-Account-Switcher-1.1.0.exe'))).toBe(true)
+    expect(fs.existsSync(path.join(dir, 'SwitchPilot-0.9.0.exe'))).toBe(false)
+    expect(fs.existsSync(path.join(dir, 'SwitchPilot-1.1.0.exe'))).toBe(true)
     expect(fs.existsSync(path.join(dir, 'update.log'))).toBe(true)
     expect(c.getState().update.download.state).toBe('ready')
   })
@@ -400,7 +400,7 @@ describe('Controller 自動更新', () => {
     fs.mkdirSync(dir, { recursive: true })
     const bad = Buffer.from(EXE_BYTES)
     bad[100] = 9 // 大小相同、雜湊不同
-    fs.writeFileSync(path.join(dir, 'Claude-Account-Switcher-1.1.0.exe'), bad)
+    fs.writeFileSync(path.join(dir, 'SwitchPilot-1.1.0.exe'), bad)
     const c = make({ updateFetch: makeFetch(() => [{ tag: 'v1.1.0' }]) as unknown as typeof fetch })
     c.start()
     await c.checkUpdate()
@@ -421,7 +421,7 @@ describe('Controller 自動更新', () => {
     expect(c.getState().update.download.state).toBe('idle')
     expect(c.getState().update.latest?.version).toBe('1.2.0')
     expect(
-      fs.existsSync(path.join(paths.updatesDir(), 'Claude-Account-Switcher-1.1.0.exe'))
+      fs.existsSync(path.join(paths.updatesDir(), 'SwitchPilot-1.1.0.exe'))
     ).toBe(false)
   })
 

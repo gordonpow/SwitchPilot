@@ -34,7 +34,7 @@ export function trayTooltip(accountName: string | null): string {
   return text.length > 120 ? text.slice(0, 119) + '…' : text
 }
 
-/** 把舊的 CLAUDE_SWITCHER_SCREENSHOT_DIALOG 值轉成 page。 */
+/** 把舊的 SCREENSHOT_DIALOG 環境變數值（SWITCHPILOT_／CLAUDE_SWITCHER_ 前綴）轉成 page。 */
 export function dialogToPage(dialog: string): string {
   if (dialog === 'settings') return 'settings/general'
   if (dialog === 'routing') return 'settings/routing'

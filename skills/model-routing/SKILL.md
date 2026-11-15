@@ -1,17 +1,17 @@
 ---
 name: model-routing
-description: Delegate development-workflow work (requirements, spec, spec review, implementation, implementation review, research, docs drafts) to Claude or Antigravity CLI (agy) models according to the Claude Account Switcher routing file ~/.claude-switcher/routing.json, falling back to the next model when quota runs out. Use before you start a subagent or hand a task to another model, when the user asks to "use the routing", "dispatch", "send it to agy", or names a workflow role, or when another skill says to delegate a role.
+description: Delegate development-workflow work (requirements, spec, spec review, implementation, implementation review, research, docs drafts) to Claude or Antigravity CLI (agy) models according to the SwitchPilot routing file ~/.switchpilot/routing.json, falling back to the next model when quota runs out. Use before you start a subagent or hand a task to another model, when the user asks to "use the routing", "dispatch", "send it to agy", or names a workflow role, or when another skill says to delegate a role.
 ---
 
-# Model routing with Claude Account Switcher
+# Model routing with SwitchPilot
 
-Claude Account Switcher stores, for each workflow role, an ordered fallback list of models in `~/.claude-switcher/routing.json`. The user edits it in the app (**Settings → Model routing**). The app installs a dispatcher, `~/.claude-switcher/bin/switcher-run.cjs`, that runs agy entries and tells you when the task must go to Claude.
+SwitchPilot stores, for each workflow role, an ordered fallback list of models in `~/.switchpilot/routing.json`. The user edits it in the app (**Settings → Model routing**). The app installs a dispatcher, `~/.switchpilot/bin/switcher-run.cjs`, that runs agy entries and tells you when the task must go to Claude.
 
 Follow this skill every time you delegate a task to another model.
 
 ## Prerequisites
 
-- Claude Account Switcher is installed and has started at least once, so `~/.claude-switcher/bin/switcher-run.cjs` exists.
+- SwitchPilot is installed and has started at least once, so `~/.switchpilot/bin/switcher-run.cjs` exists.
 - Node.js 22 or later is on `PATH`.
 - For agy entries: Antigravity CLI (`agy`) is installed, and at least one agy account is saved in the app.
 
@@ -31,7 +31,7 @@ If `switcher-run.cjs` does not exist, tell the user and use a Claude subagent fo
 
 ## Procedure
 
-1. Read `~/.claude-switcher/routing.json`. If it does not exist, use a Claude subagent for the task and say so.
+1. Read `~/.switchpilot/routing.json`. If it does not exist, use a Claude subagent for the task and say so.
 2. Find the list for the role. Take the entries in order.
 3. **First entry is `provider: "claude"`:**
    - For `requirements` and `spec`, do the work in the main conversation. If the main conversation's model differs from the entry's model, tell the user they can switch with `/model`. Do not force it.
@@ -41,7 +41,7 @@ If `switcher-run.cjs` does not exist, tell the user and use a Claude subagent fo
    1. Write a self-contained prompt to a file (see [Prompt rules](#prompt-rules-for-agy)).
    2. Run:
       ```
-      node ~/.claude-switcher/bin/switcher-run.cjs --role <role> --prompt <prompt file> --out <result file> --cwd <project dir> [--allow "<exact command>"]...
+      node ~/.switchpilot/bin/switcher-run.cjs --role <role> --prompt <prompt file> --out <result file> --cwd <project dir> [--allow "<exact command>"]...
       ```
       Run it in the background when the task is long.
    3. Read the exit code and the last line of stdout, which is JSON: `{status, provider, model, agy_account_email, attempts, message}`.
@@ -75,7 +75,7 @@ Example (PowerShell):
 
 ```powershell
 $env:AGY_ADD_DIRS = 'C:\work\myapp;C:\work\myapp-docs'
-node "$HOME\.claude-switcher\bin\switcher-run.cjs" --role implement --prompt docs\prompt-T-1.md --out docs\result-T-1.md --cwd C:\work\myapp --allow "npm test" --allow "npm run typecheck"
+node "$HOME\.switchpilot\bin\switcher-run.cjs" --role implement --prompt docs\prompt-T-1.md --out docs\result-T-1.md --cwd C:\work\myapp --allow "npm test" --allow "npm run typecheck"
 ```
 
 ## Check agy output

@@ -172,6 +172,7 @@ function initial(): AppState {
     earliestReset: null,
     config: {
       threshold: 95,
+      threshold_weekly: 95,
       auto_switch: true,
       last_folder: 'C:\\presonal_project',
       login_browser: 'chrome',
@@ -210,10 +211,10 @@ function initial(): AppState {
       latest: {
         version: '0.5.0',
         tag: 'v0.5.0',
-        htmlUrl: 'https://github.com/gordonpow/Switching_account/releases/tag/v0.5.0',
+        htmlUrl: 'https://github.com/gordonpow/SwitchPilot/releases/tag/v0.5.0',
         notes: '- 新增自動檢查更新\n- 修正若干問題',
         publishedAt: '2026-11-15T08:00:00Z',
-        assetName: 'Claude-Account-Switcher-0.5.0.exe',
+        assetName: 'SwitchPilot-0.5.0.exe',
         size: 84_000_000,
         hasHash: true
       },

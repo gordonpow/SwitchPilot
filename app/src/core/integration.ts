@@ -10,7 +10,13 @@ type Obj = Record<string, unknown>
 
 // 舊版（Python）的辨識字串；新版另外依 binDir 辨識。
 const LEGACY_MARKERS = ['switcher/statusline.py', 'switcher/hook.py']
-const DEFAULT_BIN_MARKERS = ['.claude-switcher/bin/statusline.cjs', '.claude-switcher/bin/hook.cjs']
+const DEFAULT_BIN_MARKERS = [
+  '.claude-switcher/bin/statusline.cjs',
+  '.claude-switcher/bin/hook.cjs',
+  '.switchpilot/bin/statusline.cjs',
+  '.switchpilot/bin/hook.cjs'
+]
+const LEGACY_BIN_FRAGMENT = '.claude-switcher/bin/'
 
 const fwd = (p: string): string => p.replace(/\\/g, '/')
 
@@ -172,4 +178,23 @@ export function needsUpdate(opts: { binDir?: string } = {}): boolean {
     (isObj(sl) && isOursCmd(sl.command, opts.binDir, false)) ||
     hasHook(data.hooks, 'Stop', opts.binDir)
   return present && !isInstalled(opts)
+}
+
+/** statusLine 或任一 hook 指令是否還指向舊資料夾（.claude-switcher/bin/）。 */
+export function usesLegacyBinDir(): boolean {
+  const data = storage.readJson(paths.settingsFile(), null)
+  if (!isObj(data)) return false
+  const legacy = (cmd: unknown): boolean =>
+    typeof cmd === 'string' && fwd(cmd).toLowerCase().includes(LEGACY_BIN_FRAGMENT)
+  if (isObj(data.statusLine) && legacy(data.statusLine.command)) return true
+  const hooks = data.hooks
+  if (!isObj(hooks)) return false
+  for (const groups of Object.values(hooks)) {
+    if (!Array.isArray(groups)) continue
+    for (const g of groups) {
+      if (!isObj(g) || !Array.isArray(g.hooks)) continue
+      if (g.hooks.some((h) => isObj(h) && legacy(h.command))) return true
+    }
+  }
+  return false
 }

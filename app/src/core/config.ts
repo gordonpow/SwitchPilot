@@ -9,7 +9,10 @@ import * as paths from './paths'
 import * as storage from './storage'
 
 export interface Config {
+  /** 5 小時視窗門檻（Python 版相容，只讀這個） */
   threshold: number
+  /** 每週視窗門檻；缺少時沿用 threshold */
+  threshold_weekly: number
   auto_switch: boolean
   last_folder: string
   login_browser: 'chrome' | 'edge' | 'default'
@@ -64,6 +67,7 @@ export const AUTO_COMPACT_DEFAULTS: AutoCompact = {
 
 export const DEFAULTS: Config = {
   threshold: 95,
+  threshold_weekly: 95,
   auto_switch: true,
   last_folder: '',
   login_browser: 'chrome',
@@ -87,6 +91,15 @@ export function load(): Config {
   const cfg: Config = { ...DEFAULTS }
   const data = storage.readJson(paths.configFile(), null)
   if (data && typeof data === 'object' && !Array.isArray(data)) Object.assign(cfg, data)
+  {
+    const rawObj = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    const clamp = (n: number): number => Math.min(100, Math.max(50, n))
+    const th = Number(cfg.threshold)
+    const base = Number.isFinite(th) && th > 0 ? clamp(th) : DEFAULTS.threshold
+    const wk = rawObj.threshold_weekly
+    const w = typeof wk === 'number' && Number.isFinite(wk) ? clamp(wk) : null
+    cfg.threshold_weekly = w ?? base
+  }
   cfg.auto_compact = normalizeAutoCompact((data as Record<string, unknown> | null)?.auto_compact)
   if (validateSwitchMode(cfg.switch_mode) === null) cfg.switch_mode = DEFAULTS.switch_mode
   if (typeof cfg.switch_to_earliest !== 'boolean') cfg.switch_to_earliest = DEFAULTS.switch_to_earliest

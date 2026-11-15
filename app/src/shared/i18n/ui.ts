@@ -75,7 +75,7 @@ export const uiZh = {
   'nav.settings.integration': 'Claude Code 整合',
 
   // topbar
-  'topbar.title': 'Claude 帳號切換器',
+  'topbar.title': 'SwitchPilot',
   'topbar.unsaved': '目前登入尚未儲存',
   'topbar.unsavedWithEmail': '目前登入尚未儲存（{email}）',
   'topbar.current': '目前：{name}',
@@ -102,7 +102,8 @@ export const uiZh = {
   // autoSwitch
   'autoSwitch.title': '自動切換',
   'autoSwitch.enableLabel': '用量達門檻時自動切換帳號',
-  'autoSwitch.threshold': '切換門檻',
+  'autoSwitch.thresholdFiveHour': '5 小時門檻',
+  'autoSwitch.thresholdWeekly': '每週門檻',
   'autoSwitch.pendingMsg': '已達門檻，等待目前回合結束後切換。',
 
   // launch
@@ -476,7 +477,7 @@ export const uiEn: { [K in keyof typeof uiZh]: string } = {
   'nav.settings.integration': 'Claude Code integration',
 
   // topbar
-  'topbar.title': 'Claude Account Switcher',
+  'topbar.title': 'SwitchPilot',
   'topbar.unsaved': 'Current login unsaved',
   'topbar.unsavedWithEmail': 'Current login unsaved ({email})',
   'topbar.current': 'Current: {name}',
@@ -503,7 +504,8 @@ export const uiEn: { [K in keyof typeof uiZh]: string } = {
   // autoSwitch
   'autoSwitch.title': 'Auto switch',
   'autoSwitch.enableLabel': 'Automatically switch account when usage reaches threshold',
-  'autoSwitch.threshold': 'Switch threshold',
+  'autoSwitch.thresholdFiveHour': '5-hour threshold',
+  'autoSwitch.thresholdWeekly': 'Weekly threshold',
   'autoSwitch.pendingMsg': 'Threshold reached. Waiting for current turn to end before switching.',
 
   // launch

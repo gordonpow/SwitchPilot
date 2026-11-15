@@ -104,6 +104,7 @@ export function OverviewPage({
 }): React.JSX.Element {
   const t = useT()
   const th = state.config.threshold
+  const thWeekly = state.config.threshold_weekly
   const toAccounts = (): void => onNavigate('accounts')
   return (
     <div className="space-y-4">
@@ -161,7 +162,7 @@ export function OverviewPage({
                             <MiniBar
                               label={t('usage.sevenDay')}
                               pct={wp}
-                              color={usageColor(wp ?? 0, th)}
+                              color={usageColor(wp ?? 0, thWeekly)}
                               text={wp === null ? t('usage.noData') : `${wp}%`}
                               reset={formatReset(w?.resets_at, Date.now())}
                             />

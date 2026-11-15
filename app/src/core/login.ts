@@ -82,8 +82,8 @@ export class LoginSession {
         ...process.env,
         CLAUDE_CONFIG_DIR: d,
         BROWSER: bat,
-        CLAUDE_SWITCHER_LOGIN_DIR: d,
-        CLAUDE_SWITCHER_BROWSER: this.opts.browser ?? 'chrome'
+        SWITCHPILOT_LOGIN_DIR: d,
+        SWITCHPILOT_BROWSER: this.opts.browser ?? 'chrome'
       }
       const sp = this.opts.spawn ?? (nodeSpawn as unknown as NonNullable<LoginOptions['spawn']>)
       const proc = sp(cmd[0], cmd.slice(1), {

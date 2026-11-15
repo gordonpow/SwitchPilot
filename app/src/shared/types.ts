@@ -43,7 +43,10 @@ export type LoginBrowser = 'chrome' | 'edge' | 'default'
 import type { Lang, LangSetting } from './i18n'
 
 export interface AppConfig {
+  /** 5 小時門檻 */
   threshold: number
+  /** 每週門檻 */
+  threshold_weekly: number
   auto_switch: boolean
   last_folder: string
   login_browser: LoginBrowser

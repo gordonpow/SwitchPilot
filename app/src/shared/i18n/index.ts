@@ -1,4 +1,5 @@
 // 多國語言：字典與 t()。純 TS，不得 import electron 或 node 專屬模組（renderer 也會用）。
+import { envVar } from '../env'
 import { mainEn, mainZh } from './main'
 import { uiEn, uiZh } from './ui'
 
@@ -28,11 +29,11 @@ export function setSystemLocales(list: string[]): void {
 }
 
 /**
- * 系統語言來源。環境變數 CLAUDE_SWITCHER_LANG 為 zh-TW／en 時只取代這個來源
+ * 系統語言來源。環境變數 SWITCHPILOT_LANG 為 zh-TW／en 時只取代這個來源
  * （測試與截圖用），不會覆蓋使用者明確設定。
  */
 export function systemLocales(): string[] {
-  const env = typeof process !== 'undefined' ? process.env?.['CLAUDE_SWITCHER_LANG'] : undefined
+  const env = typeof process !== 'undefined' ? envVar('LANG') : undefined
   if (env === 'zh-TW' || env === 'en') return [env]
   if (sysLocales.length > 0) return sysLocales
   try {

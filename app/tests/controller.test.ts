@@ -393,7 +393,13 @@ describe('Controller', () => {
     const cfg = ctl.getState().config
     expect(cfg.threshold).toBe(50)
     expect(cfg.usage_poll_seconds).toBe(30)
-    expect(ctl.monitor.threshold).toBe(50)
+    expect(ctl.monitor.threshold).toEqual({ five_hour: 50, seven_day: 95 })
+    expect(await ctl.setConfig({ threshold_weekly: 70 })).toEqual({ ok: true })
+    expect(ctl.getState().config.threshold_weekly).toBe(70)
+    expect(ctl.monitor.threshold).toEqual({ five_hour: 50, seven_day: 70 })
+    expect(await ctl.setConfig({ threshold_weekly: 10 })).toEqual({ ok: true })
+    expect(ctl.getState().config.threshold_weekly).toBe(50)
+    expect(await ctl.setConfig({ threshold_weekly: 'x' as never })).toMatchObject({ code: 'INVALID' })
     expect(await ctl.setConfig({ login_browser: 'x' as never })).toMatchObject({ code: 'INVALID' })
   })
 

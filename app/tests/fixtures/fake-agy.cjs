@@ -7,7 +7,7 @@ const argv = process.argv.slice(2)
 
 function email() {
   try {
-    const f = process.env.CLAUDE_SWITCHER_FAKE_AGYCRED
+    const f = (process.env.SWITCHPILOT_FAKE_AGYCRED || process.env.CLAUDE_SWITCHER_FAKE_AGYCRED)
     const blob = JSON.parse(fs.readFileSync(f, 'utf-8')).blob
     return JSON.parse(blob).id_token_email
   } catch {

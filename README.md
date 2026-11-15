@@ -1,4 +1,4 @@
-# Claude Account Switcher
+# SwitchPilot
 
 <img src="app/build/icon.png" width="96" align="right" alt="">
 
@@ -13,12 +13,12 @@ The interface is available in English and Traditional Chinese. The app uses the 
 | Electron app (recommended) | `app/` | Current version |
 | Python app | `switcher/` | Legacy tkinter version, kept as a fallback |
 
-The two versions share the same data files. Run only one of them at a time.
+The two versions share the same data files. Run only one of them at a time. The Python app still reads `%USERPROFILE%\.claude-switcher`, which is a junction to the new folder after an upgrade (see below).
 
 ## Features
 
 - **Usage overview**: 5-hour and 7-day usage, reset times, and data source for every account. Usage refreshes every 2 minutes.
-- **Automatic switching**: when the current account reaches the threshold (default 95%) or Claude Code reports a `rate_limit` error, the app switches to the next available account.
+- **Automatic switching**: when the current account reaches the 5-hour or weekly threshold (each adjustable, default 95%) or Claude Code reports a `rate_limit` error, the app switches to the next available account.
 - **Live switching (default)**: the app replaces `~/.claude/.credentials.json`. Claude Code reloads the file before its next request, so running sessions do not restart. A session that stopped on a rate limit receives a "continue" prompt.
 - **Restart switching (optional)**: the app closes each running `claude`, switches the account, and resumes the session with `claude --resume`.
 - **Claude CLI list**: shows every running `claude` process and its session, including processes that this app did not start.
@@ -37,14 +37,25 @@ The two versions share the same data files. Run only one of them at a time.
 
 ## Install
 
-- **Portable exe**: run `Claude Account Switcher <version>.exe`. No installation is necessary.
+- **Portable exe**: run `SwitchPilot <version>.exe`. No installation is necessary.
 - **From source**:
   ```powershell
   cd app
   npm install
   npm run dev        # run in development mode
-  npm run package    # build dist\Claude Account Switcher <version>.exe
+  npm run package    # build dist\SwitchPilot <version>.exe
   ```
+
+## Upgrading from Claude Account Switcher
+
+SwitchPilot is the new name of Claude Account Switcher. Your accounts and settings carry over.
+
+1. **Close the old version first** (quit it from the tray). If the old app is still running, it holds files in the data folder, the move fails, and SwitchPilot keeps using the old folder until the next start.
+2. **Data folder move.** On the first start, SwitchPilot moves `%USERPROFILE%\.claude-switcher` to `%USERPROFILE%\.switchpilot` and leaves a junction (a folder link) at the old path. Old commands, the installed skill, and the old Python app keep working through the junction. If the move fails, the app logs an event, keeps using the old folder, and tries again on the next start. If the move succeeds but the junction cannot be created, the app logs an event; the Python app then needs `CLAUDE_SWITCHER_HOME` set to `%USERPROFILE%\.switchpilot`.
+3. **Claude Code integration.** If the statusline and hooks are installed, the app rewrites their paths in `~/.claude/settings.json` to `~/.switchpilot/bin/...` (with a backup).
+4. **Launch at sign-in.** The app removes the old registry entry, so it does not start twice.
+5. **Automatic update.** The old app updates to the new version in place. The exe keeps its old file name (for example `Claude-Account-Switcher-1.1.2.exe`) after the update. You can rename it. Downloads of new versions are named `SwitchPilot-<version>.exe`.
+6. **Environment variables** use the `SWITCHPILOT_` prefix. The old `CLAUDE_SWITCHER_` names still work.
 
 ## First-time setup
 
@@ -64,16 +75,16 @@ Alternative: run `/login` in Claude Code, then click **Save current login** in t
 
 ## Model routing
 
-`~/.claude-switcher/routing.json` lists, for each workflow role, an ordered fallback list of providers and models. You can edit it in **Settings → Model routing**.
+`~/.switchpilot/routing.json` lists, for each workflow role, an ordered fallback list of providers and models. You can edit it in **Settings → Model routing**.
 
 Roles: `requirements`, `spec`, `spec_review`, `implement`, `impl_review`, `research`, `docs`.
 
 Example: `implement` uses agy `gemini-3.8-flash-high` first. If agy has no quota, it uses Claude Sonnet. If Claude has no quota on any account, it uses agy `claude-sonnet-4-6`.
 
-The app installs the dispatcher at `~/.claude-switcher/bin/switcher-run.cjs`:
+The app installs the dispatcher at `~/.switchpilot/bin/switcher-run.cjs`:
 
 ```
-node ~/.claude-switcher/bin/switcher-run.cjs --role <role> --prompt <prompt file> --out <result file> --cwd <project dir> [--allow "<exact command>"]...
+node ~/.switchpilot/bin/switcher-run.cjs --role <role> --prompt <prompt file> --out <result file> --cwd <project dir> [--allow "<exact command>"]...
 ```
 
 | Exit code | Meaning |
@@ -92,7 +103,7 @@ The **Dispatch** page shows running and recent dispatches.
 Open **Settings → Model routing**. The **Setup guide** card at the top shows each step with its status. Click **Check again** after you complete a step.
 
 1. **Node.js 22 or later.** Install it from [nodejs.org](https://nodejs.org) and make sure `node` is on `PATH`. Restart the app.
-2. **Dispatcher.** The app installs `~/.claude-switcher/bin/switcher-run.cjs` when it starts. If the step shows as missing, click **Check again** to install it again.
+2. **Dispatcher.** The app installs `~/.switchpilot/bin/switcher-run.cjs` when it starts. If the step shows as missing, click **Check again** to install it again.
 3. **Antigravity CLI (optional).** Only necessary if your routing contains `agy` entries. Install `agy`, then click **Check again**.
 4. **agy accounts (optional).** In **Accounts → Google**, save at least one agy account. The dispatcher picks an account with quota.
 5. **Install the skill.** Click **Install skill**. The app writes `~/.claude/skills/model-routing/SKILL.md`. If a different version is already there, the app asks first and keeps the old file as `SKILL.md.bak`.
@@ -119,14 +130,14 @@ Account switching, usage display, and auto compact do not need a skill.
 
 ## Data locations
 
-- App data: `%USERPROFILE%\.claude-switcher\` (`slots\`, `usage_api\`, `usage\`, `events\`, `agy\`, `dispatch\`, `bin\`, `backups\`, `routing.json`). Set `CLAUDE_SWITCHER_HOME` to use a different folder.
+- App data: `%USERPROFILE%\.switchpilot\` (`slots\`, `usage_api\`, `usage\`, `events\`, `agy\`, `dispatch\`, `bin\`, `backups\`, `routing.json`). Set `SWITCHPILOT_HOME` to use a different folder. All environment variables use the `SWITCHPILOT_` prefix; the old `CLAUDE_SWITCHER_` names still work, and the new name wins when both are set.
 - Claude files that the app changes: `%USERPROFILE%\.claude\.credentials.json`, `%USERPROFILE%\.claude.json` (only `oauthAccount`), and `%USERPROFILE%\.claude\settings.json` (only when you install or remove the integration).
 - agy login: Windows Credential Manager entry `gemini:antigravity`.
 
 ## Uninstall
 
-1. In **Settings → Claude Code integration**, click **Remove integration**. This restores `settings.json`. The backups are in `%USERPROFILE%\.claude-switcher\backups\`.
-2. Quit the app from the tray. Delete the `%USERPROFILE%\.claude-switcher` folder and the exe.
+1. In **Settings → Claude Code integration**, click **Remove integration**. This restores `settings.json`. The backups are in `%USERPROFILE%\.switchpilot\backups\`.
+2. Quit the app from the tray. Delete the `%USERPROFILE%\.switchpilot` folder and the exe.
 
 ## Known limitations
 

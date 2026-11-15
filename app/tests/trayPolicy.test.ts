@@ -36,8 +36,8 @@ describe('shouldHaveTray', () => {
 
 describe('trayTooltip', () => {
   it('含帳號名稱；沒有則顯示未儲存', () => {
-    expect(trayTooltip('a@b.c')).toBe('Claude 帳號切換器\n目前：a@b.c')
-    expect(trayTooltip(null)).toBe('Claude 帳號切換器\n目前：未儲存')
+    expect(trayTooltip('a@b.c')).toBe('SwitchPilot\n目前：a@b.c')
+    expect(trayTooltip(null)).toBe('SwitchPilot\n目前：未儲存')
   })
   it('截斷到 120 字元', () => expect(trayTooltip('x'.repeat(500)).length).toBe(120))
 })

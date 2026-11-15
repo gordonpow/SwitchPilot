@@ -1,5 +1,6 @@
 // 由 claude 透過 BROWSER 環境變數呼叫：以無痕模式開啟登入網址。絕不丟例外。
-// CLAUDE_SWITCHER_BROWSER：chrome（--incognito）｜edge（--inprivate）｜default（預設瀏覽器）。
+// SWITCHPILOT_BROWSER：chrome（--incognito）｜edge（--inprivate）｜default（預設瀏覽器）。
+import { envVar } from '../shared/env'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { execFileSync, spawn as nodeSpawn, type SpawnOptions } from 'node:child_process'
@@ -127,7 +128,7 @@ function normalizeBrowser(v: string | undefined): Browser {
 function main(): void {
   const url = extractUrl(process.argv.slice(2))
   if (!url) return
-  const loginDir = process.env.CLAUDE_SWITCHER_LOGIN_DIR
+  const loginDir = envVar('LOGIN_DIR')
   if (loginDir) {
     try {
       fs.writeFileSync(path.join(loginDir, 'browser_url.txt'), url, 'utf-8')
@@ -136,7 +137,7 @@ function main(): void {
     }
   }
   try {
-    openUrl(url, { browser: normalizeBrowser(process.env.CLAUDE_SWITCHER_BROWSER) })
+    openUrl(url, { browser: normalizeBrowser(envVar('BROWSER')) })
   } catch {
     /* 絕不丟例外 */
   }

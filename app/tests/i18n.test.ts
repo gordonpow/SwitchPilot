@@ -32,24 +32,24 @@ describe('normalizeLocale', () => {
 })
 
 describe('resolveLanguage', () => {
-  const orig = process.env['CLAUDE_SWITCHER_LANG']
+  const orig = process.env['SWITCHPILOT_LANG']
   afterEach(() => {
-    if (orig === undefined) delete process.env['CLAUDE_SWITCHER_LANG']
-    else process.env['CLAUDE_SWITCHER_LANG'] = orig
+    if (orig === undefined) delete process.env['SWITCHPILOT_LANG']
+    else process.env['SWITCHPILOT_LANG'] = orig
   })
 
   it('明確設定優先於環境變數', () => {
-    process.env['CLAUDE_SWITCHER_LANG'] = 'zh-TW'
+    process.env['SWITCHPILOT_LANG'] = 'zh-TW'
     expect(resolveLanguage('en')).toBe('en')
-    process.env['CLAUDE_SWITCHER_LANG'] = 'en'
+    process.env['SWITCHPILOT_LANG'] = 'en'
     expect(resolveLanguage('zh-TW')).toBe('zh-TW')
   })
 
   it('auto 與壞值用環境變數', () => {
-    process.env['CLAUDE_SWITCHER_LANG'] = 'en'
+    process.env['SWITCHPILOT_LANG'] = 'en'
     expect(resolveLanguage('auto')).toBe('en')
     expect(resolveLanguage('xx')).toBe('en')
-    process.env['CLAUDE_SWITCHER_LANG'] = 'zh-TW'
+    process.env['SWITCHPILOT_LANG'] = 'zh-TW'
     expect(resolveLanguage('auto')).toBe('zh-TW')
     expect(resolveLanguage(undefined)).toBe('zh-TW')
   })
@@ -57,8 +57,8 @@ describe('resolveLanguage', () => {
 
 describe('t()', () => {
   it('參數取代、缺參數保留、未知鍵回傳鍵名', () => {
-    expect(tl('zh-TW', 'tray.tooltip', { name: 'A' })).toBe('Claude 帳號切換器\n目前：A')
-    expect(tl('en', 'tray.tooltip', { name: 'A' })).toBe('Claude Account Switcher\nCurrent: A')
+    expect(tl('zh-TW', 'tray.tooltip', { name: 'A' })).toBe('SwitchPilot\n目前：A')
+    expect(tl('en', 'tray.tooltip', { name: 'A' })).toBe('SwitchPilot\nCurrent: A')
     expect(tl('en', 'tray.tooltip')).toContain('{name}')
     expect(tl('en', 'tray.tooltip', {})).toContain('{name}')
     expect(tl('en', 'nope.nothing' as never)).toBe('nope.nothing')

@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 /** 唯一發布倉庫來源。 */
-export const UPDATE_REPO = 'gordonpow/Switching_account'
+export const UPDATE_REPO = 'gordonpow/SwitchPilot'
 
 export interface ParsedVersion {
   major: number
@@ -167,8 +167,11 @@ export function pickLatest(releases: any[], includePrerelease: boolean): LatestR
     )
     if (exeAssets.length === 0) continue
 
-    // 優先挑選名稱符合 /^Claude-Account-Switcher-.*\.exe$/i 的資產，否則取第一個
-    let chosen = exeAssets.find((a: any) => /^Claude-Account-Switcher-.*\.exe$/i.test(a.name))
+    // 優先 SwitchPilot-*.exe，其次舊名 Claude-Account-Switcher-*.exe，再其次第一個 exe
+    let chosen = exeAssets.find((a: any) => /^SwitchPilot[-. ].*\.exe$/i.test(a.name))
+    if (!chosen) {
+      chosen = exeAssets.find((a: any) => /^Claude-Account-Switcher-.*\.exe$/i.test(a.name))
+    }
     if (!chosen) {
       chosen = exeAssets[0]
     }
@@ -212,7 +215,7 @@ export async function checkForUpdate(
     method: 'GET',
     headers: {
       Accept: 'application/vnd.github+json',
-      'User-Agent': 'claude-account-switcher'
+      'User-Agent': 'switchpilot'
     }
   })
 
@@ -261,7 +264,7 @@ export async function downloadAsset(
   const res = await fetchFn(asset.url, {
     method: 'GET',
     headers: {
-      'User-Agent': 'claude-account-switcher'
+      'User-Agent': 'switchpilot'
     }
   })
 

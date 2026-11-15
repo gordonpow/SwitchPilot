@@ -1,7 +1,7 @@
 import * as path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { claudeAvailable, slotAvailableAt, slotBlocked } from '../src/core/claudeavail'
-import { slotsDir, usageApiDir } from '../src/core/paths'
+import { claudeAvailable, exhaustedRecovered, slotAvailableAt, slotBlocked } from '../src/core/claudeavail'
+import { configFile, slotsDir, usageApiDir } from '../src/core/paths'
 import { writeJsonAtomic } from '../src/core/storage'
 import { useTempEnv } from './helpers'
 
@@ -150,5 +150,46 @@ describe('slotAvailableAt', () => {
   it('都沒有回 now', () => {
     expect(slotAvailableAt({ id: 's', saved_at: 1 }, null, now, 95)).toBe(now)
     expect(slotAvailableAt({ id: 's', saved_at: 1, exhausted_until: now - 5 }, rec(null, 0), now, 95)).toBe(now)
+  })
+})
+
+describe('claudeavail 分開門檻', () => {
+  useTempEnv()
+  const now = 10000
+  const thr = { five_hour: 90, seven_day: 60 }
+  const mk = (five: number, seven: number) => ({
+    ts: now - 10,
+    five_hour: { used_percentage: five, resets_at: now + 100 },
+    seven_day: { used_percentage: seven, resets_at: now + 500 }
+  })
+  const slot = { id: 's', saved_at: 1 }
+
+  it('slotBlocked：各視窗比各自門檻', () => {
+    expect(slotBlocked(slot, mk(80, 50), now, thr)).toBe(false)
+    expect(slotBlocked(slot, mk(80, 70), now, thr)).toBe(true)
+    expect(slotBlocked(slot, mk(95, 10), now, thr)).toBe(true)
+  })
+  it('exhaustedRecovered：週視窗高於週門檻不算恢復', () => {
+    const s = { id: 's', saved_at: 1, exhausted_until: now + 1000, exhausted_at: now - 1000 }
+    expect(exhaustedRecovered(s, mk(80, 70), thr)).toBe(false)
+    expect(exhaustedRecovered(s, mk(80, 50), thr)).toBe(true)
+  })
+  it('slotAvailableAt：只計超過自己門檻的視窗', () => {
+    expect(slotAvailableAt(slot, mk(80, 70), now, thr)).toBe(now + 500)
+    expect(slotAvailableAt(slot, mk(80, 50), now, thr)).toBe(now)
+  })
+  it('claudeAvailable：未傳門檻時讀 config 的兩個門檻', () => {
+    writeJsonAtomic(path.join(slotsDir(), 'slot-1.json'), { id: 'slot-1', name: 'A', saved_at: 1000 })
+    writeJsonAtomic(path.join(usageApiDir(), 'slot-1.json'), {
+      slot_id: 'slot-1',
+      ts: now - 50,
+      saved_at: 1000,
+      five_hour: { used_percentage: 80, resets_at: now + 3600 },
+      seven_day: { used_percentage: 70, resets_at: now + 7200 }
+    })
+    writeJsonAtomic(configFile(), { threshold: 90, threshold_weekly: 60 })
+    expect(claudeAvailable(now).available).toBe(false)
+    writeJsonAtomic(configFile(), { threshold: 90, threshold_weekly: 80 })
+    expect(claudeAvailable(now).available).toBe(true)
   })
 })

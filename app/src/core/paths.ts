@@ -1,4 +1,6 @@
 // 所有檔案路徑。每次呼叫都重新讀取環境變數，方便測試覆寫。
+import { envVar } from '../shared/env'
+import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
@@ -9,7 +11,7 @@ function home(): string {
 // ---- Claude Code 的檔案 ----
 
 export function claudeHome(): string {
-  return process.env.CLAUDE_SWITCHER_CLAUDE_HOME || path.join(home(), '.claude')
+  return envVar('CLAUDE_HOME') || path.join(home(), '.claude')
 }
 
 export function credFile(): string {
@@ -21,13 +23,41 @@ export function settingsFile(): string {
 }
 
 export function claudeJson(): string {
-  return process.env.CLAUDE_SWITCHER_CLAUDE_JSON || path.join(home(), '.claude.json')
+  return envVar('CLAUDE_JSON') || path.join(home(), '.claude.json')
 }
 
 // ---- 本程式的資料 ----
 
+/** 預設資料夾（新名稱）。 */
+export function defaultAppDir(): string {
+  return path.join(home(), '.switchpilot')
+}
+
+/** 舊版資料夾（~/.claude-switcher）。 */
+export function legacyAppDir(): string {
+  return path.join(home(), '.claude-switcher')
+}
+
+/** 新資料夾「有效」：存在且含 config.json 或 slots/（空資料夾不算，避免遮住舊資料）。 */
+export function isValidAppDir(dir: string): boolean {
+  return fs.existsSync(path.join(dir, 'config.json')) || fs.existsSync(path.join(dir, 'slots'))
+}
+
+// 只快取「有效的新資料夾」；key 含 homedir，避免 homedir 改變（測試）時用到過時結果。
+let cachedNew: { home: string; dir: string } | null = null
+
 export function appDir(): string {
-  return process.env.CLAUDE_SWITCHER_HOME || path.join(home(), '.claude-switcher')
+  const override = envVar('HOME')
+  if (override) return override
+  const h = home()
+  if (cachedNew && cachedNew.home === h) return cachedNew.dir
+  const newDir = defaultAppDir()
+  if (isValidAppDir(newDir)) {
+    cachedNew = { home: h, dir: newDir }
+    return newDir
+  }
+  if (fs.existsSync(legacyAppDir())) return legacyAppDir()
+  return newDir
 }
 
 export const slotsDir = (): string => path.join(appDir(), 'slots')

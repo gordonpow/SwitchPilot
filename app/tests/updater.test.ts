@@ -89,8 +89,8 @@ describe('updater core module', () => {
 
   describe('pickLatest', () => {
     const validAsset = {
-      name: 'Claude-Account-Switcher-1.1.0.exe',
-      browser_download_url: 'https://github.com/gordonpow/Switching_account/releases/download/v1.1.0/Claude-Account-Switcher-1.1.0.exe',
+      name: 'SwitchPilot-1.1.0.exe',
+      browser_download_url: 'https://github.com/gordonpow/SwitchPilot/releases/download/v1.1.0/SwitchPilot-1.1.0.exe',
       size: 50000000,
       digest: 'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
     }
@@ -118,7 +118,7 @@ describe('updater core module', () => {
           prerelease: true,
           assets: [
             {
-              name: 'Claude-Account-Switcher-1.2.0-beta.1.exe',
+              name: 'SwitchPilot-1.2.0-beta.1.exe',
               browser_download_url: 'https://github.com/download/beta.exe',
               size: 100
             }
@@ -138,7 +138,7 @@ describe('updater core module', () => {
       expect(latestWithPre?.version).toBe('1.2.0-beta.1')
     })
 
-    it('prefers asset matching Claude-Account-Switcher-*.exe over other exe assets', () => {
+    it('prefers asset matching SwitchPilot-*.exe over other exe assets', () => {
       const releases = [
         {
           tag_name: 'v1.1.0',
@@ -153,7 +153,27 @@ describe('updater core module', () => {
         }
       ]
       const latest = pickLatest(releases, true)
-      expect(latest?.asset.name).toBe('Claude-Account-Switcher-1.1.0.exe')
+      expect(latest?.asset.name).toBe('SwitchPilot-1.1.0.exe')
+    })
+
+    it('accepts the legacy Claude-Account-Switcher-*.exe name, preferring the new name', () => {
+      const legacy = {
+        name: 'Claude-Account-Switcher-1.1.0.exe',
+        browser_download_url: 'https://github.com/gordonpow/SwitchPilot/releases/download/v1.1.0/Claude-Account-Switcher-1.1.0.exe',
+        size: 100
+      }
+      const other = { name: 'other-tool.exe', browser_download_url: 'https://github.com/other.exe', size: 200 }
+      expect(pickLatest([{ tag_name: 'v1.1.0', assets: [other, legacy] }], true)?.asset.name).toBe(
+        'Claude-Account-Switcher-1.1.0.exe'
+      )
+      expect(pickLatest([{ tag_name: 'v1.1.0', assets: [legacy, validAsset] }], true)?.asset.name).toBe(
+        'SwitchPilot-1.1.0.exe'
+      )
+    })
+
+    it('falls back to the first exe when no known name matches', () => {
+      const other = { name: 'whatever.exe', browser_download_url: 'https://github.com/other.exe', size: 200 }
+      expect(pickLatest([{ tag_name: 'v1.1.0', assets: [other] }], true)?.asset.name).toBe('whatever.exe')
     })
 
     it('rejects insecure asset names containing path traversal', () => {
@@ -201,7 +221,7 @@ describe('updater core module', () => {
             tag_name: 'v1.2.0',
             assets: [
               {
-                name: 'Claude-Account-Switcher-1.2.0.exe',
+                name: 'SwitchPilot-1.2.0.exe',
                 browser_download_url: 'https://github.com/download/app.exe',
                 size: 1000
               }
@@ -216,7 +236,7 @@ describe('updater core module', () => {
         expect.objectContaining({
           headers: expect.objectContaining({
             Accept: 'application/vnd.github+json',
-            'User-Agent': 'claude-account-switcher'
+            'User-Agent': 'switchpilot'
           })
         })
       )
@@ -239,7 +259,7 @@ describe('updater core module', () => {
 
   describe('isAllowedDownloadUrl', () => {
     it('accepts allowed github urls', () => {
-      expect(isAllowedDownloadUrl('https://github.com/gordonpow/Switching_account/releases/download/v1.0.0/app.exe')).toBe(true)
+      expect(isAllowedDownloadUrl('https://github.com/gordonpow/SwitchPilot/releases/download/v1.0.0/app.exe')).toBe(true)
       expect(isAllowedDownloadUrl('https://objects.githubusercontent.com/github-production-release-asset-2e65be/foo')).toBe(true)
       expect(isAllowedDownloadUrl('https://release.githubusercontent.com/asset.exe')).toBe(true)
     })

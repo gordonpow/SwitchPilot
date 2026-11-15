@@ -61,7 +61,7 @@ describe('LoginSession', () => {
     expect(after).toEqual(before)
   })
 
-  it('子程序環境變數含 BROWSER 與 CLAUDE_SWITCHER_BROWSER', () => {
+  it('子程序環境變數含 BROWSER 與 SWITCHPILOT_BROWSER', () => {
     let seen: NodeJS.ProcessEnv = {}
     const s = new LoginSession({
       claudeCmd: [process.execPath, FAKE, 'sleep'],
@@ -75,7 +75,7 @@ describe('LoginSession', () => {
     })
     sessions.push(s)
     s.start()
-    expect(seen.CLAUDE_SWITCHER_BROWSER).toBe('edge')
+    expect(seen.SWITCHPILOT_BROWSER).toBe('edge')
     expect(seen.CLAUDE_CONFIG_DIR).toBe(s.dir)
     expect(seen.BROWSER).toBe(path.join(s.dir!, 'open_browser.cmd'))
     return s.cancel()

@@ -1,7 +1,7 @@
 {
-  "name": "claude-account-switcher",
-  "version": "1.1.2",
-  "description": "Claude 帳號切換器",
+  "name": "switchpilot",
+  "version": "1.2.0",
+  "description": "SwitchPilot",
   "main": "./out/main/index.js",
   "author": "local",
   "scripts": {

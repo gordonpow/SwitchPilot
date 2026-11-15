@@ -1,5 +1,6 @@
 // 自動切換判斷（純邏輯，不讀檔）。移植自 Python monitor.py。
 import { t } from '../shared/i18n'
+import { toThresholds, type Thresholds } from './thresholds'
 
 export type Window = { used_percentage: number; resets_at: number } | null
 
@@ -36,14 +37,14 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function overWindows(record: UsageRecord | null, threshold: number): Win[] {
+function overWindows(record: UsageRecord | null, threshold: Thresholds): Win[] {
   if (!record) return []
   const out: Win[] = []
   for (const key of ['five_hour', 'seven_day'] as const) {
     const w = record[key] as Win | null | undefined
     if (!w || typeof w !== 'object') continue
     const used = num(w.used_percentage)
-    if (used !== null && used >= threshold) out.push(w)
+    if (used !== null && used >= threshold[key]) out.push(w)
   }
   return out
 }
@@ -73,10 +74,14 @@ export class Monitor {
   /** unix 秒；規則 1 忽略 ts 小於此值的 stopfailure（切換後舊帳號造成的失敗）。 */
   ignoreFailuresUntil = 0
 
+  threshold: Thresholds
+
   constructor(
-    public threshold = 95,
+    threshold: number | Thresholds = 95,
     public pendingTimeout = 600
-  ) {}
+  ) {
+    this.threshold = toThresholds(threshold)
+  }
 
   reset(since: number): void {
     this.pending = false

@@ -122,6 +122,7 @@ export function AccountsPage({
                 key={a.id}
                 account={a}
                 threshold={state.config.threshold}
+                thresholdWeekly={state.config.threshold_weekly}
                 now={now}
                 busy={busy}
                 onSwitch={() => onSwitch(a)}
