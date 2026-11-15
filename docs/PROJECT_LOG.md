@@ -7,7 +7,7 @@
 - **技術**：
   - 目前版本 `app/`：Electron 44 + React 19 + Vite 8 + Tailwind CSS 4 + shadcn/ui（TypeScript），Node v26；vitest；electron-builder portable exe。
   - 舊版 `switcher/`：Python 3.13 + tkinter（保留備援）。
-- **Repo**：本機 `C:\presonal_project\Switching_account`（尚未建立 git repo）。
+- **Repo**：https://github.com/gordonpow/Switching_account（公開；本機 `C:\presonal_project\Switching_account`）。agy 執行紀錄（`*.agy.log`）與 `img/` 截圖含帳號資訊，列入 `.gitignore`。
 - **架構重點**：
   - 帳號 slot 存在 `%USERPROFILE%\.claude-switcher\slots\`，切換時替換 `~/.claude/.credentials.json` 與 `~/.claude.json` 的 `oauthAccount`；兩版共用相同檔案格式。
   - 所有帳號用量：以各帳號 token 呼叫未公開的 `api/oauth/usage`；非使用中帳號 token 由程式 refresh，使用中帳號交給 Claude Code。
@@ -19,9 +19,7 @@
 
 ### 已發布
 
-（無）
-
-### 已實作未 commit
+初版 `488f0c7`（2026-11-15 推送）包含以下全部功能：
 
 - Python 版帳號切換器 GUI（AC-1～AC-9）：`switcher/`、`tests/`（71 個 unittest 通過）、`啟動切換器.bat`。
 - Python 版 GUI 內瀏覽器（Google）登入新增帳號。
@@ -34,7 +32,6 @@
 - 使用者實測 Electron 版：瀏覽器登入新增兩個帳號、用量總覽（含非使用中帳號 refresh）、手動切換、安裝整合、託管 claude、調低門檻觸發自動切換。
 - 實作 diff 審查（使用者要求驗證時）。
 - Electron 版驗收後移除 Python 版。
-- 建立 git repo 並 commit（使用者要求時）。
 
 ## 對話紀錄
 
@@ -76,3 +73,4 @@
 
 - 使用者回報兩個帳號都顯示「額度已用完」→ 查明：live 切換後執行中 claude 的 statusline 仍回報切換前帳號（F115112109）的 rate_limits，但被標成新帳號，monitor 誤判 abcz 超過門檻並把它標成用完到 02:10。修正（`docs/work/hot-swap-safety/2b-stale-statusline.md`）：statusline 與用量 API 的 `resets_at` 相差超過 1 小時視為舊帳號資料不採用；總覽警示加「清除用完標記」；總覽帳號摘要顯示 5 小時／7 天下次重置時間。400 個測試通過、typecheck 通過、假資料截圖確認；portable exe 重建中。
 - 使用者要求實作改用 agy Flash、驗證用 Claude Sonnet，並做模型分工第二期；追加「依用量跨供應商遞補（Claude 都用完改 agy Sonnet）」與「/compact 後清畫面」→ 實測 `JETSKI_OAUTH_TOKEN` 不會覆蓋 agy 登入，退回同時只用一個 agy 帳號（可同時跑 N 個任務，預設 2）；新增派工頁、Claude 可用性判斷（與自動切換共用）、`routing.json` 跨供應商遞補清單、整理後送 Ctrl+L（不用 /clear 以保留摘要）。規格審查 11 條採用；實作 agy Flash 4 次派工（3 個問題由主導者修正），Sonnet 實作審查 5 條全採用。449 個測試通過。Ctrl+L 清畫面待使用者實測。
+- 使用者要求推到 GitHub → 建立 git repo 與根目錄 `.gitignore`（排除建置產物、`__pycache__`、含 email 的 agy log、截圖），掃描確認無 email／token 後 commit `488f0c7` 並推送 `main`。
