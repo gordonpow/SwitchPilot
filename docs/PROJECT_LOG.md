@@ -87,3 +87,4 @@
 - 使用者要求：每 10 分鐘檢查更新、紅點引導、自動下載並替換（`docs/work/auto-update/`）→ 規格審查 9 條採用；T-1A（updater、update.ps1）agy Flash、T-1B（controller、介面）Sonnet；實作審查無高、中 6 條＋低 2 條採用並由 Sonnet 修正。537 個測試通過。版本號提高到 1.1.0。
 - 使用者要求：兩個帳號都用完時換到最早重置的帳號（`docs/work/earliest-reset/`）→ Sonnet 實作；實作審查無高，採用 6 條（restart 模式維持原行為、等待期間只暫停 60 秒、失敗還原、resume 前確認可用並順延、只對 rate_limit 停下的 session 送提示、補測試），不採用 1 條（排程只在記憶體，列為已知限制）。設定「帳號切換」頁有開關（預設開）。557 個測試通過。
 - 重建 `Claude Account Switcher 1.1.0.exe`（18:02），以假資料啟動實際 portable exe 截工作列，確認顯示新圖示。commit `638eaa9` 並發布 v1.1.0 預覽版（刪除 agy 誤建的根目錄 `package.json`）。
+- 使用者回報：中途用重置卡後用完標記不會消失、也不會自動切換（`docs/work/early-reset/`）→ 用量 API 顯示已低於門檻（資料晚於標記 60 秒以上）時自動清除標記；live 模式下目前帳號恢復則送繼續，其他帳號恢復且目前帳號仍被擋則切過去並送繼續（不需事先排程，App 重啟後也有效）。Sonnet 實作、主導者補沒有排程的情境。

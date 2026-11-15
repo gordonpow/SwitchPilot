@@ -24,6 +24,8 @@ export interface Slot {
   oauth_account: Record<string, unknown>
   saved_at: number
   exhausted_until: number
+  /** 標記用完的時間（unix 秒）；舊資料沒有此欄位 */
+  exhausted_at?: number
   [key: string]: unknown
 }
 
@@ -105,7 +107,8 @@ export function addSlot(name: string, credentials: Obj, oauthAccount: Obj): Slot
     credentials,
     oauth_account: oauthAccount,
     saved_at: Date.now() / 1000,
-    exhausted_until: existing ? existing.exhausted_until || 0 : 0
+    exhausted_until: existing ? existing.exhausted_until || 0 : 0,
+    ...(existing && existing.exhausted_at ? { exhausted_at: existing.exhausted_at } : {})
   }
   updateSlot(slot)
   return slot
@@ -198,10 +201,13 @@ export function renameSlot(slotId: string, name: string): Slot {
   return slot
 }
 
-export function markExhausted(slotId: string, untilTs: number): void {
+/** 標記用完；同時記下標記時間（nowSec 預設為現在，測試可傳入）。untilTs 為 0 表示清除。 */
+export function markExhausted(slotId: string, untilTs: number, nowSec: number = Date.now() / 1000): void {
   const slot = getSlot(slotId)
   if (slot) {
     slot.exhausted_until = untilTs
+    if (untilTs > 0) slot.exhausted_at = nowSec
+    else delete slot.exhausted_at
     updateSlot(slot)
   }
 }

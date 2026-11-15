@@ -19,7 +19,7 @@ import { withSlotLock } from '../core/lock'
 import * as login from '../core/login'
 import { Monitor, type EventRecord, type UsageRecord } from '../core/monitor'
 import * as nodebin from '../core/nodebin'
-import { slotAvailableAt, slotBlocked } from '../core/claudeavail'
+import { exhaustedRecovered, slotAvailableAt, slotBlocked } from '../core/claudeavail'
 import { needsRelogin, readUsageApi, UsagePoller, type FetchImpl, type UsageApiRecord } from '../core/oauth'
 import * as paths from '../core/paths'
 import { pidAlive, killTree, whichFirst } from '../core/procutil'
@@ -1044,6 +1044,11 @@ export class Controller {
     const r = usage.readNewEvents(this.watermark)
     this.watermark = r.last
     this.ingestTurns(r.events as unknown as ReadonlyArray<{ [k: string]: unknown }>)
+    // 已因提前恢復而換帳號時，本輪的 current／用量都是舊帳號的，留給下一個 tick
+    if (await this.checkEarlyRecovery(nowSec)) {
+      this.requestPush()
+      return
+    }
     await this.handleResume(nowSec)
     await this.handleLiveFailures(nowSec, r.events as unknown as EventRecord[])
     await this.maybeCompact(nowSec)
@@ -1079,6 +1084,51 @@ export class Controller {
         restartRuns: true
       })
     }
+  }
+
+  /**
+   * 額度提前恢復（例如重置卡）：用量 API 顯示已低於門檻的帳號，清除其用完標記。
+   * 正在等待重置（resumeAt）時：目前帳號恢復就立刻送繼續；其他帳號恢復則切過去再送繼續。
+   */
+  private async checkEarlyRecovery(nowSec: number): Promise<boolean> {
+    const thr = Number(this.cfg.threshold) || 95
+    const cleared: string[] = []
+    for (const s of accounts.listSlots()) {
+      if ((s.exhausted_until || 0) <= nowSec) continue
+      if (!exhaustedRecovered(s, readUsageApi(s.id), thr)) continue
+      await withSlotLock(s.id, () => accounts.clearExhausted(s.id))
+      this.log('info', t('log.exhaustRecovered', { name: s.name }))
+      cleared.push(s.id)
+    }
+    if (cleared.length === 0) return false
+    this.noTargetUntil = 0
+    this.warnedExhaust = false
+    this.requestPush()
+    if (this.cfg.switch_mode !== 'live') return false
+    const cur = accounts.currentSlotId()
+    if (cur && cleared.includes(cur)) {
+      // 目前帳號恢復：對因額度停下的 session 送繼續（即使沒有排程，例如 App 重啟過）
+      this.resumeAt = nowSec
+      return false
+    }
+    // 其他帳號恢復：只有目前帳號仍無法使用時才切換過去
+    const curSlot = cur ? accounts.getSlot(cur) : null
+    if (curSlot && !slotBlocked(curSlot, readUsageApi(curSlot.id), nowSec, thr, API_BLOCK_WINDOW_S)) {
+      return false
+    }
+    const other = cleared[0]
+    if (this.switching) return false
+    const prev = this.resumeAt
+    const r = await this.runSwitch({
+      target: other,
+      reason: t('log.exhaustRecovered', { name: this.slotName(other) }),
+      exhaustedUntil: 0,
+      auto: false,
+      restartRuns: false,
+      resumeStopped: true
+    })
+    if (!r.ok) this.resumeAt = prev
+    return r.ok
   }
 
   /** 全部用完後安排的時間到了：開啟接續視窗，對因額度停下的 session 送「繼續」（與一般切換後相同路徑）。 */
@@ -1381,6 +1431,8 @@ export class Controller {
     exhaustedUntil: number
     auto: boolean
     restartRuns: boolean
+    /** 切換後對 rate_limit 停下的 session 一律送繼續（不受 15 分鐘限制） */
+    resumeStopped?: boolean
   }): Promise<Result> {
     if (this.switching) return fail(t('err.switching'), 'BUSY')
     this.switching = true
@@ -1392,7 +1444,7 @@ export class Controller {
       if (p.auto) {
         if (current && p.exhaustedUntil) {
           const until = p.exhaustedUntil
-          await withSlotLock(current, () => accounts.markExhausted(current, until))
+          await withSlotLock(current, () => accounts.markExhausted(current, until, nowSec))
         }
         const slots = accounts.listSlots()
         // 挑目標；refresh 確定失敗（dead）的帳號加入失敗集合後改挑下一個。
@@ -1482,7 +1534,7 @@ export class Controller {
         // 換帳號之後才掃描並送提示，掃描不會延遲換帳號
         const scan = this.scanEnabled ? await this.scanNow() : []
         for (const c of scan) {
-          if (this.promptEligible(c)) await this.continueSession(c)
+          if (this.promptEligible(c, p.resumeStopped ? Infinity : INTERRUPT_MAX_AGE_S)) await this.continueSession(c)
         }
         return ok
       }

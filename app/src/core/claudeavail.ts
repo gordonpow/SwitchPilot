@@ -10,6 +10,7 @@ export interface SlotLike {
   id: string
   saved_at: number
   exhausted_until?: number
+  exhausted_at?: number
 }
 
 export interface UsageWindowLike {
@@ -62,6 +63,35 @@ export function slotBlocked(
   }
 
   return false
+}
+
+/** 舊資料沒有 exhausted_at 時，以 exhausted_until 往前推 5 小時當作標記時間。 */
+const LEGACY_EXHAUST_WINDOW_S = 18000
+/** 用量資料需比標記時間晚至少這麼多秒，才視為標記之後的新資料。 */
+const RECOVER_MIN_GAP_S = 60
+
+/**
+ * 用完標記是否已因額度提前恢復（例如重置卡）而可清除：
+ * 用量資料比標記時間晚至少 60 秒，且 5 小時與 7 天視窗都低於門檻（沒有資料的視窗不算超過；兩個都沒資料則不判定）。
+ * needs_relogin 的資料不可信，一律回 false。
+ */
+export function exhaustedRecovered(
+  slot: SlotLike,
+  rec: UsageApiRecordLike | null | undefined,
+  threshold: number
+): boolean {
+  const until = slot.exhausted_until || 0
+  if (until <= 0 || !rec || rec.needs_relogin === true || typeof rec.ts !== 'number') return false
+  const markedAt = slot.exhausted_at && slot.exhausted_at > 0 ? slot.exhausted_at : until - LEGACY_EXHAUST_WINDOW_S
+  if (rec.ts < markedAt + RECOVER_MIN_GAP_S) return false
+  let seen = 0
+  for (const w of [rec.five_hour, rec.seven_day]) {
+    const used = w && typeof w.used_percentage === 'number' ? w.used_percentage : null
+    if (used === null || !Number.isFinite(used)) continue
+    if (used >= threshold) return false
+    seen++
+  }
+  return seen > 0
 }
 
 /**
