@@ -1,85 +1,127 @@
-# Claude 帳號切換器
+# Claude Account Switcher
 
-在 Windows 上管理多個 Claude 訂閱帳號：一次看到所有帳號的 5 小時／7 天用量；額度用完（或達到門檻）時，一鍵或自動切換帳號，並在同一個專案資料夾用 `claude --continue` 接著原本的對話繼續做。
+<img src="app/build/icon.png" width="96" align="right" alt="">
 
-本專案有兩個版本，資料格式相同、可互換，**同一時間只執行其中一個**：
+A Windows tray app that manages several Claude subscription accounts for Claude Code. It shows the 5-hour and 7-day usage of every account. When the current account reaches its limit, it switches to another account, and Claude Code sessions that are already running continue on the new account.
 
-| 版本 | 位置 | 狀態 |
+It can also manage Antigravity CLI (`agy`) accounts and route development-workflow stages to Claude or agy models.
+
+The interface is available in English and Traditional Chinese. The app uses the system language by default; you can change it in **Settings → General**.
+
+| Version | Location | Status |
 |---|---|---|
-| Electron 版（建議） | `app/` | 目前版本：深色卡片介面、所有帳號用量總覽、Chrome 無痕／Edge InPrivate 登入 |
-| Python 版 | `switcher/` | 舊版（tkinter），保留作為備援，之後移除 |
+| Electron app (recommended) | `app/` | Current version |
+| Python app | `switcher/` | Legacy tkinter version, kept as a fallback |
 
-## 需求
+The two versions share the same data files. Run only one of them at a time.
 
-- Windows 10／11
-- Node.js 22 以上（statusline、hook、runner、登入腳本由系統的 `node` 執行；開發也需要）
-- Windows Terminal（`wt.exe`；找不到時改開一般主控台視窗）
-- Claude Code，帳號為 Claude Pro 或 Max 訂閱
+## Features
 
-## 安裝
+- **Usage overview**: 5-hour and 7-day usage, reset times, and data source for every account. Usage refreshes every 2 minutes.
+- **Automatic switching**: when the current account reaches the threshold (default 95%) or Claude Code reports a `rate_limit` error, the app switches to the next available account.
+- **Live switching (default)**: the app replaces `~/.claude/.credentials.json`. Claude Code reloads the file before its next request, so running sessions do not restart. A session that stopped on a rate limit receives a "continue" prompt.
+- **Restart switching (optional)**: the app closes each running `claude`, switches the account, and resumes the session with `claude --resume`.
+- **Claude CLI list**: shows every running `claude` process and its session, including processes that this app did not start.
+- **Auto compact**: when a session's context passes a threshold, the app sends `/compact` (or `/clear`) after the turn ends. After a compact, it can also clear the screen (Ctrl+L).
+- **agy accounts**: saves, switches, and shows the quota of Antigravity CLI accounts.
+- **Model routing and dispatch**: see [Model routing](#model-routing).
+- **Tray and autostart**: optional close-to-tray and launch at sign-in.
 
-- **直接使用**：執行 `app\dist\Claude Account Switcher 1.0.0.exe`（可攜式，不需安裝）。
-- **從原始碼**：
+## Requirements
+
+- Windows 10 or 11
+- Node.js 22 or later on `PATH`. The statusline, hook, runner, and dispatch scripts run with the system `node`.
+- Claude Code with a Claude Pro or Max subscription
+- Windows Terminal (`wt.exe`), optional. If it is not installed, the app opens a console window.
+- Antigravity CLI (`agy`), optional, only for agy features
+
+## Install
+
+- **Portable exe**: run `Claude Account Switcher <version>.exe`. No installation is necessary.
+- **From source**:
   ```powershell
   cd app
   npm install
-  npm run dev        # 開發執行
-  npm run package    # 產生 dist\Claude Account Switcher <版本>.exe
+  npm run dev        # run in development mode
+  npm run package    # build dist\Claude Account Switcher <version>.exe
   ```
 
-## 第一次設定
+## First-time setup
 
-1. 開啟程式，在「新增帳號」卡片按「瀏覽器登入」。程式會開 Chrome 無痕視窗（可在設定改成 Edge InPrivate 或預設瀏覽器），在視窗中登入（可選 Google）；完成後輸入名稱即新增。過程不會動到目前登入的帳號，也不會影響正在執行的 claude。
-2. 重複步驟 1 新增其他帳號。
-3. 在設定（右上角齒輪）按「安裝整合」：修改 `~/.claude/settings.json` 的 `statusLine` 與 `Stop`、`StopFailure` hook（修改前備份；若有 Python 版的整合會一併換掉）。已開啟的 claude 需重開才會生效。
+1. Open **Accounts** and click **Browser login**. The app opens a Chrome incognito window (you can select Edge InPrivate or the default browser in settings). Sign in, then type a name for the account. This does not change the account that Claude Code currently uses.
+2. Repeat step 1 for each account.
+3. Open **Settings → Claude Code integration** and click **Install integration**. This adds the `statusLine` command and the `Stop`, `StopFailure`, and `UserPromptSubmit` hooks to `~/.claude/settings.json`. The app makes a backup before it changes the file. Restart Claude Code sessions that were already open.
 
-替代方式：先在 claude 中 `/login`，再按「儲存目前登入的帳號」。
+Alternative: run `/login` in Claude Code, then click **Save current login** in the app.
 
-## 使用方式
+## How it works
 
-- **用量總覽**：每張帳號卡片顯示 5 小時與 7 天用量、重置時間、資料來源（API／statusline）與更新時間；預設每 2 分鐘更新，右上角可手動重新整理。用量達門檻為紅色、80% 以上為黃色。
-- **手動切換**：卡片上按「切換到此帳號」。有託管中的 claude 時，可選「切換並重啟」或「只切換，不重啟」。
-- **啟動 claude**：選擇專案資料夾，按「啟動」或「接續上次」（`--continue`）。claude 在 Windows Terminal 中由本程式託管，才能被自動重啟。資料夾路徑不可含分號（`;`）。
-- **自動切換**：開啟「用量達門檻時自動切換帳號」並設定門檻（50–100%，預設 95%）。會跳過已用完或 API 用量已達門檻的帳號。
-- **所有帳號都用完**：不切換，顯示系統通知與最早重置時間。
-- **需要重新登入**：未使用中帳號的 token 無法更新時，卡片會顯示警告，按「重新登入」即可。
+1. **Usage API**: the app reads usage with the token stored for each account. It refreshes the tokens of inactive accounts only. Claude Code refreshes the token of the active account, and the app does not touch it.
+2. **Statusline**: the integrated statusline script writes the `rate_limits` and context size that Claude Code reports. The app reads these files every 3 seconds.
+3. **Turn end**: the `Stop` hook tells the app that a turn ended. The app switches at the end of a turn, so it does not interrupt work.
+4. **Rate-limit fallback**: when the `StopFailure` hook reports `rate_limit`, the app switches immediately.
+5. **Before each switch**, the app saves the current credentials back to the slot of the current account, because Claude Code can refresh the token.
 
-## 運作原理
+## Model routing
 
-1. **用量 API**：程式用各帳號保存的 token 查詢 Claude Code `/usage` 使用的 API。未使用中帳號的 token 快到期時由程式自動更新並存回；使用中帳號的 token 交給 Claude Code 自己更新，程式不碰。
-2. **statusline 門檻**：整合的 statusline 腳本把 Claude Code 傳來的 `rate_limits` 寫成檔案；程式每 3 秒讀取，使用中帳號達門檻就進入「等待回合結束」。
-3. **回合結束**：`Stop` hook 通知回合已結束才切換，避免中斷正在進行的工作（等待超過 10 分鐘也會切換）。
-4. **rate_limit 備援**：`StopFailure` hook 收到 `rate_limit` 錯誤時立即切換。
-5. **runner 重開**：切換時結束託管的 claude，把憑證換成下一個帳號，runner 以 `claude --continue` 在同一資料夾重新開啟。
+`~/.claude-switcher/routing.json` lists, for each workflow role, an ordered fallback list of providers and models. You can edit it in **Settings → Model routing**.
 
-切換前會先把目前憑證寫回目前帳號的 slot，保存 Claude Code 可能已更新的 token。
+Roles: `requirements`, `spec`, `spec_review`, `implement`, `impl_review`, `research`, `docs`.
 
-## 資料存放位置
+Example: `implement` uses agy `gemini-3.8-flash-high` first. If agy has no quota, it uses Claude Sonnet. If Claude has no quota on any account, it uses agy `claude-sonnet-4-6`.
 
-- 程式資料：`%USERPROFILE%\.claude-switcher\`（`slots\` 帳號、`usage_api\` 各帳號用量、`usage\`、`events\`、`runs\`、`bin\` 腳本、`backups\`）。可用環境變數 `CLAUDE_SWITCHER_HOME` 改位置。
-- 被修改的 Claude 檔案：`%USERPROFILE%\.claude\.credentials.json`、`%USERPROFILE%\.claude.json`（只換 `oauthAccount`）、`%USERPROFILE%\.claude\settings.json`（只在安裝／移除整合時）。
+The app installs the dispatcher at `~/.claude-switcher/bin/switcher-run.cjs`:
 
-## 移除方式
+```
+node ~/.claude-switcher/bin/switcher-run.cjs --role <role> --prompt <prompt file> --out <result file> --cwd <project dir> [--allow "<exact command>"]...
+```
 
-1. 設定中按「移除整合」，還原 `settings.json`（備份在 `%USERPROFILE%\.claude-switcher\backups\`）。
-2. 關閉程式，刪除 `%USERPROFILE%\.claude-switcher` 資料夾與 exe。
+| Exit code | Meaning |
+|---|---|
+| `0` | agy completed the task. The answer is in the result file. |
+| `10` | Delegate: the next entry is a Claude model. The last JSON line names the model. Run the task with that model. |
+| `1` | Failed. Read `message` in the last JSON line and `<result file>.agy.log`. |
+| `2` | Invalid arguments |
 
-## 已知限制
+The **Dispatch** page shows running and recent dispatches.
 
-- 用量 API 與 token 更新是 Claude Code 內部使用、未公開文件的介面，可能隨 Claude Code 改版失效；失效時只影響用量顯示，改用 statusline 資料，切換功能不受影響。
-- 非本程式啟動的 claude（VS Code 擴充套件、其他終端機）不會被切換，且可能 refresh 舊帳號 token、改寫憑證檔；若它仍在使用某個未使用中帳號，會和本程式互相作廢 token，導致該帳號需要重新登入。切換前請先關閉它們。
-- 同一資料夾同時開多個 claude 時，`--continue` 可能接錯對話。
-- 強制結束 claude 時，其底下的 MCP server 會一併結束（重開後會重新啟動）。
-- 不支援 macOS／Linux、桌面版 Claude app、claude.ai 網頁。
+**Claude Code does not use the routing by itself.** The dispatcher is a command-line tool. Claude Code calls it only when a skill or `CLAUDE.md` tells it to. This repository includes that skill: [`skills/model-routing/SKILL.md`](skills/model-routing/SKILL.md). Install it for all your projects:
 
-## 安全提醒
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.claude\skills\model-routing" | Out-Null
+Copy-Item skills\model-routing\SKILL.md "$HOME\.claude\skills\model-routing\"
+```
 
-`slots\*.json` 內含登入權杖（等同密碼）。請勿上傳到 Git、雲端硬碟或任何同步服務，也不要分享給他人。檔案沒有加密，保護程度與原本的 `.credentials.json` 相同（只靠使用者目錄的權限）。token 只會送往 `api.anthropic.com` 與 `platform.claude.com`。
+Or copy the `skills/model-routing` folder to `.claude/skills/` in one project. Claude Code then uses the routing whenever it delegates a task, or when you ask it to ("dispatch this to agy", "use the routing").
 
-## 條款提醒
+Account switching, usage display, and auto compact do not need a skill.
 
-使用多個帳號來繞過用量限制，可能違反 Anthropic 的使用條款。請自行確認並自負風險。
+## Data locations
 
-## Python 版（舊版）
+- App data: `%USERPROFILE%\.claude-switcher\` (`slots\`, `usage_api\`, `usage\`, `events\`, `agy\`, `dispatch\`, `bin\`, `backups\`, `routing.json`). Set `CLAUDE_SWITCHER_HOME` to use a different folder.
+- Claude files that the app changes: `%USERPROFILE%\.claude\.credentials.json`, `%USERPROFILE%\.claude.json` (only `oauthAccount`), and `%USERPROFILE%\.claude\settings.json` (only when you install or remove the integration).
+- agy login: Windows Credential Manager entry `gemini:antigravity`.
 
-`python -m switcher` 或雙擊 `啟動切換器.bat`；需要 Python 3.13。功能為 Electron 版的子集（只顯示使用中帳號的用量，登入只支援 Edge InPrivate）。
+## Uninstall
+
+1. In **Settings → Claude Code integration**, click **Remove integration**. This restores `settings.json`. The backups are in `%USERPROFILE%\.claude-switcher\backups\`.
+2. Quit the app from the tray. Delete the `%USERPROFILE%\.claude-switcher` folder and the exe.
+
+## Known limitations
+
+- The usage API and token refresh are undocumented interfaces of Claude Code. A Claude Code update can break them. If they fail, the app uses the statusline data, and switching still works.
+- After a live switch, the statusline of a running session can report the previous account's limits until its next request. The app ignores statusline data whose reset time does not match the API data.
+- The app does not refresh agy tokens. Close all `agy` processes before you switch or add an agy account.
+- Windows only. The Claude desktop app and claude.ai are not supported.
+
+## Security
+
+`slots\*.json` and `agy\slots\*.json` contain login tokens. Treat them as passwords. Do not commit them, sync them to cloud storage, or share them. The files are not encrypted; only the permissions of your user folder protect them. Claude tokens are sent only to `api.anthropic.com` and `platform.claude.com`.
+
+## Terms of service
+
+Using several accounts to avoid usage limits can violate the Anthropic and Google terms of service. Check the terms yourself. You use this app at your own risk.
+
+## Python app (legacy)
+
+Run `python -m switcher` or double-click `啟動切換器.bat`. Requires Python 3.13. It has a subset of the features: it shows usage of the active account only, and it supports Edge InPrivate login only.
