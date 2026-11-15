@@ -19,7 +19,7 @@
 
 ### 已發布
 
-- **v1.2.0 預覽版**（2026-11-16）：改名 SwitchPilot（資料夾搬移、環境變數 `SWITCHPILOT_*`、repo 改名）、5 小時／每週門檻分開設定。commit 與資產見對話紀錄。
+- **v1.2.0 預覽版**（2026-11-16）：改名 SwitchPilot（資料夾搬移、環境變數 `SWITCHPILOT_*`、repo 改名）、5 小時／每週門檻分開設定。https://github.com/gordonpow/SwitchPilot/releases/tag/v1.2.0 ，commit `9d650e8`，資產 `SwitchPilot-1.2.0.exe`（SHA-256 `0b2fd371…8be4`，與 GitHub `digest` 一致）。
 - **v1.1.2 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.2 ，commit `df7e0ab`，資產 `Claude-Account-Switcher-1.1.2.exe`（SHA-256 `c6e3ead4…26a3`）。舊版用完標記在額度恢復後不清除的修正。
 - **v1.1.1 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.1 ，commit `58dcd07`，資產 `Claude-Account-Switcher-1.1.1.exe`（SHA-256 `7e00aa4c…ffdb`，與 GitHub `digest` 一致）。額度提前恢復（重置卡）自動解除標記並切換。
 - **v1.1.0 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.0 ，commit `638eaa9`，資產 `Claude-Account-Switcher-1.1.0.exe`（SHA-256 `0e677bcc…67f2`，與 GitHub `digest` 一致）。自動更新、模型分工設定引導、全部用完換到最早重置帳號、工作列圖示修正。
@@ -100,4 +100,4 @@
 - 使用者要求名稱不綁定 Claude／Gemini，並整理常用 AI 的登入方式與剩餘用量 → Haiku 子代理查資料：Codex CLI（`~/.codex/auth.json`，`/status` 顯示 5 小時／每週）、Copilot CLI（認證管理員 `copilot-cli`，premium requests 每月）、Cursor CLI、Kiro CLI（每月 credits）；Gemini CLI 已被 Antigravity CLI 取代、Qwen OAuth 免費層已關閉。建議下一步支援 Codex 與 Copilot（另案）。
 - 使用者選擇「全部改（含 repo 與資料夾）」、名稱 SwitchPilot（`docs/work/rename-switchpilot/`）→ 介面／exe／appId 改名；`~/.claude-switcher` 啟動時搬到 `~/.switchpilot` 並留 junction（失敗沿用舊資料夾、下次再試；殘留舊資料夾改名保留後補 junction）；每次啟動把 settings.json 中舊 bin 路徑改寫；環境變數 `SWITCHPILOT_*`（舊名後備）；移除舊開機啟動登錄值；updater 改新 repo 並接受新舊資產名。規格審查 7 條全採用；Sonnet 實作；實作審查無高、採用 3 條。
 - 使用者要求 5 小時與每週門檻分開調整（`docs/work/split-threshold/`）→ 新增 `threshold_weekly`（缺少時沿用 `threshold`；Python 版只讀 `threshold` 不受影響），自動切換、可用性、最早可用、重置卡恢復、switcher-run 全部依視窗門檻；設定頁兩個滑桿、用量條依視窗門檻上色。Sonnet 實作。typecheck 通過、612 個測試通過。
-- 使用者同意改 repo 名稱並發布 v1.2.0。
+- 使用者同意改 repo 名稱並發布 v1.2.0 → commit `9d650e8` 推送；repo 改名為 `gordonpow/SwitchPilot`（確認舊 API 網址轉址後回傳 v1.2.0）；打包 `SwitchPilot 1.2.0.exe`（假資料截圖確認名稱與兩個門檻滑桿），發布 v1.2.0 預覽版；並提供改名後的 Threads 貼文。
