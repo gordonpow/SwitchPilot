@@ -37,6 +37,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { formatDateTime, formatRelative } from '@/lib/format'
 import { act } from '@/lib/use-app-state'
 import { cn } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 import { NameDialog } from './NameDialog'
 
 /** 優先顯示的模型；其餘依快取順序補到最多 5 個。 */
@@ -67,6 +68,7 @@ function ModelBar({
   remaining: number
   resetAt: number | null
 }): React.JSX.Element {
+  const t = useT()
   const pct = Math.min(100, Math.max(0, Math.round(remaining * 100)))
   return (
     <div className="space-y-1">
@@ -74,17 +76,17 @@ function ModelBar({
         <span className="min-w-0 flex-1 truncate text-muted-foreground" title={id}>
           {id}
         </span>
-        <span className="shrink-0 font-medium tabular-nums">剩 {pct}%</span>
+        <span className="shrink-0 font-medium tabular-nums">{t('agy.percentRemaining', { pct })}</span>
       </div>
       <Progress
         value={pct}
-        aria-label={`${id} 剩餘額度`}
+        aria-label={t('agy.modelQuotaAria', { id })}
         className="h-1.5 bg-muted"
         indicatorClassName={remainingColor(pct)}
       />
       {resetAt ? (
         <p className="text-right text-[11px] text-muted-foreground tabular-nums">
-          {formatDateTime(resetAt)} 重置
+          {t('agy.resetsAt', { time: formatDateTime(resetAt) })}
         </p>
       ) : null}
     </div>
@@ -100,6 +102,7 @@ interface CardProps {
 }
 
 function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps): React.JSX.Element {
+  const t = useT()
   const models = pickModels(a)
   const q = a.quota
   return (
@@ -109,7 +112,7 @@ function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps):
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-sm font-semibold">{a.name}</span>
-              {a.active && <Badge>使用中</Badge>}
+              {a.active && <Badge>{t('accounts.active')}</Badge>}
               <Badge variant="secondary" className="text-[10px]">
                 agy
               </Badge>
@@ -125,20 +128,20 @@ function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps):
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label={`${a.name} 的更多操作`}>
+                  <Button variant="ghost" size="icon-sm" aria-label={t('accounts.moreActionsAria', { name: a.name })}>
                     <MoreVertical />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent>更多操作</TooltipContent>
+              <TooltipContent>{t('accounts.moreActions')}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={onRename}>
-                <Pencil /> 重新命名
+                <Pencil /> {t('common.rename')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                <Trash2 /> 刪除（不影響目前的 agy 登入）
+                <Trash2 /> {t('agy.deleteMenuItem')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -151,7 +154,7 @@ function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps):
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">尚無額度資料</p>
+          <p className="text-xs text-muted-foreground">{t('agy.noQuotaData')}</p>
         )}
 
         {q?.error && (
@@ -166,13 +169,13 @@ function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps):
           >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             <span className="tabular-nums">
-              最後更新：{q ? formatDateTime(q.ts) : '無'}（token 已過期，切換到此帳號後更新）
+              {t('agy.tokenExpiredDesc', { time: q ? formatDateTime(q.ts) : t('common.none') })}
             </span>
           </p>
         ) : (
           q && (
             <p className="text-xs text-muted-foreground tabular-nums">
-              最後更新：{formatDateTime(q.ts)}
+              {t('agy.lastUpdated', { time: formatDateTime(q.ts) })}
             </p>
           )
         )}
@@ -184,7 +187,7 @@ function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps):
           disabled={a.active || busy}
           onClick={onSwitch}
         >
-          <ArrowRightLeft /> {a.active ? '目前使用中' : '切換到此帳號'}
+          <ArrowRightLeft /> {a.active ? t('accounts.currentlyActive') : t('accounts.switchTo')}
         </Button>
       </CardContent>
     </Card>
@@ -192,6 +195,7 @@ function AgyCard({ account: a, busy, onRename, onDelete, onSwitch }: CardProps):
 }
 
 function LoginStatus({ login }: { login: AppState['agyLogin'] }): React.JSX.Element | null {
+  const t = useT()
   if (login.state === 'idle') return null
   const base = 'flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm'
   if (login.state === 'waiting' || login.state === 'signed_in') {
@@ -204,19 +208,19 @@ function LoginStatus({ login }: { login: AppState['agyLogin'] }): React.JSX.Elem
         )}
         <span className="min-w-0 flex-1 text-pretty">
           {login.state === 'waiting'
-            ? '等待登入：請在新開的視窗完成 agy 登入'
-            : (login.message ?? `已登入 ${login.email ?? ''}，請關閉 agy 視窗以完成`)}
+            ? t('agy.waitingLogin')
+            : (login.message ?? t('agy.loginWindowClosePrompt', { email: login.email ?? '' }))}
         </span>
         {login.state === 'signed_in' && (
           <Button
             size="xs"
-            onClick={() => void act(window.api.agyFinishLogin(), '已新增 agy 帳號')}
+            onClick={() => void act(window.api.agyFinishLogin(), t('agy.addedToast'))}
           >
-            完成
+            {t('common.finish')}
           </Button>
         )}
         <Button size="xs" variant="outline" onClick={() => void act(window.api.agyCancelLogin())}>
-          <X /> 取消
+          <X /> {t('common.cancel')}
         </Button>
       </div>
     )
@@ -239,7 +243,7 @@ function LoginStatus({ login }: { login: AppState['agyLogin'] }): React.JSX.Elem
       )}
       <span className="min-w-0 flex-1 text-pretty">{login.message}</span>
       <Button size="xs" variant="outline" onClick={() => void act(window.api.agyCancelLogin())}>
-        關閉
+        {t('common.close')}
       </Button>
     </div>
   )
@@ -256,6 +260,7 @@ interface Props {
 }
 
 export function AgySection({ state, now, dialog, onDialogChange }: Props): React.JSX.Element {
+  const t = useT()
   const { agyAccounts, agyLogin, agyCurrent, agyQuerying } = state
   const [renaming, setRenaming] = useState<AgyAccountView | null>(null)
   const [deleting, setDeleting] = useState<AgyAccountView | null>(null)
@@ -270,12 +275,12 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
     <section aria-label="Google" className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 className="text-sm font-semibold">Google</h3>
-        <span className="text-xs text-muted-foreground tabular-nums">{agyAccounts.length} 個</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{t('common.countItems', { count: agyAccounts.length })}</span>
         <span className="text-xs text-muted-foreground tabular-nums">
           {agyQuerying
-            ? '查詢額度中…'
+            ? t('agy.queryingQuota')
             : lastQuery
-              ? `額度 ${formatRelative(lastQuery, now)}更新`
+              ? t('agy.quotaUpdated', { time: formatRelative(lastQuery, now) })
               : ''}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -287,7 +292,7 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
               disabled={flowing}
               onClick={() => onDialogChange('save')}
             >
-              <Save /> 儲存目前 agy 登入（{agyCurrent.email}）
+              <Save /> {t('agy.saveCurrentWithEmail', { email: agyCurrent.email ?? '' })}
             </Button>
           )}
           <Tooltip>
@@ -295,14 +300,14 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="重新整理 agy 額度"
+                aria-label={t('agy.refreshQuota')}
                 disabled={agyQuerying}
                 onClick={() => void act(window.api.agyRefreshQuota())}
               >
                 <RefreshCw className={agyQuerying ? 'animate-spin' : undefined} />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>重新整理 agy 額度</TooltipContent>
+            <TooltipContent>{t('agy.refreshQuota')}</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -311,7 +316,7 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
 
       {agyAccounts.length === 0 ? (
         <p className="rounded-md border border-dashed p-4 text-sm text-pretty text-muted-foreground">
-          還沒有 Google 帳號。從頁首「新增帳號」選 Google，再登入或儲存目前的 agy 登入。
+          {t('agy.emptyAccounts')}
         </p>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
@@ -322,7 +327,7 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
               busy={flowing || state.switching}
               onRename={() => setRenaming(a)}
               onDelete={() => setDeleting(a)}
-              onSwitch={() => void act(window.api.agySwitch(a.id), `已切換到 agy「${a.name}」`)}
+              onSwitch={() => void act(window.api.agySwitch(a.id), t('agy.switchedTo', { name: a.name }))}
             />
           ))}
         </div>
@@ -330,41 +335,41 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
 
       <NameDialog
         open={renaming !== null}
-        title="重新命名 agy 帳號"
+        title={t('agy.renameTitle')}
         initialName={renaming?.name ?? ''}
-        submitLabel="儲存"
+        submitLabel={t('common.save')}
         onClose={() => setRenaming(null)}
         onSubmit={async (name) => {
-          if (renaming && (await act(window.api.agyRename(renaming.id, name), '已重新命名')))
+          if (renaming && (await act(window.api.agyRename(renaming.id, name), t('dialog.renamed'))))
             setRenaming(null)
         }}
       />
       <NameDialog
         open={savingCurrent}
-        title="儲存目前的 agy 登入"
-        description={agyCurrent?.email ? `目前登入：${agyCurrent.email}` : undefined}
+        title={t('agy.saveCurrentTitle')}
+        description={agyCurrent?.email ? t('dialog.currentLogin', { email: agyCurrent.email ?? '' }) : undefined}
         initialName={agyCurrent?.email?.split('@')[0] ?? ''}
-        submitLabel="儲存"
+        submitLabel={t('common.save')}
         onClose={() => onDialogChange(null)}
         onSubmit={async (name) => {
-          if (await act(window.api.agySaveCurrent(name), '已儲存 agy 帳號')) onDialogChange(null)
+          if (await act(window.api.agySaveCurrent(name), t('agy.accountSaved'))) onDialogChange(null)
         }}
       />
 
       <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>刪除 agy 帳號「{deleting?.name}」？</AlertDialogTitle>
+            <AlertDialogTitle>{t('agy.deleteConfirmTitle', { name: deleting?.name ?? '' })}</AlertDialogTitle>
             <AlertDialogDescription className="text-pretty">
-              只會移除這裡儲存的登入資料，不會登出目前的 agy。需要時必須重新登入。
+              {t('agy.deleteConfirmDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleting && void act(window.api.agyDelete(deleting.id), '已刪除 agy 帳號')}
+              onClick={() => deleting && void act(window.api.agyDelete(deleting.id), t('agy.accountDeleted'))}
             >
-              刪除
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -373,16 +378,15 @@ export function AgySection({ state, now, dialog, onDialogChange }: Props): React
       <AlertDialog open={confirmAdd} onOpenChange={(o) => onDialogChange(o ? 'add' : null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>新增 agy 帳號</AlertDialogTitle>
+            <AlertDialogTitle>{t('agy.addTitle')}</AlertDialogTitle>
             <AlertDialogDescription className="text-pretty">
-              會先把目前的 agy 登入存成帳號並暫時登出，再開新視窗讓你登入新帳號。登入後請關閉
-              agy 視窗，程式會儲存新帳號並還原原本的登入。開始前請先關閉所有 agy。
+              {t('agy.addConfirmDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void act(window.api.agyStartLogin())}>
-              開始
+              {t('common.start')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,4 +1,5 @@
 // 安裝／移除 Claude Code settings.json 中的 statusLine 與 hooks。
+import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as paths from './paths'
@@ -39,7 +40,7 @@ function loadSettings(): Obj {
   const p = paths.settingsFile()
   if (!fs.existsSync(p)) return {}
   const data = storage.readJsonStrict(p)
-  if (!isObj(data)) throw new Error('settings.json 不是 JSON 物件，不予修改')
+  if (!isObj(data)) throw new Error(t('err.settingsNotObject'))
   return data
 }
 
@@ -84,7 +85,7 @@ export interface InstallOptions {
 /** 安裝 statusLine 與 Stop／StopFailure／UserPromptSubmit hook（同時移除 Python 版項目）。 */
 export function install(opts: InstallOptions = {}): void {
   const nodePath = opts.nodePath ?? findNode()
-  if (!nodePath) throw new Error('找不到 Node.js，請先安裝 Node.js')
+  if (!nodePath) throw new Error(t('err.nodeMissingInstall'))
   const bin = opts.binDir ?? paths.binDir()
   const settings = loadSettings()
   backup(settings)
@@ -99,7 +100,7 @@ export function install(opts: InstallOptions = {}): void {
   stripOursHooks(next, bin)
   next.statusLine = { type: 'command', command: `${base}statusline.cjs"` }
   if (next.hooks === undefined) next.hooks = {}
-  if (!isObj(next.hooks)) throw new Error('settings.json 的 hooks 格式不是物件，不予修改')
+  if (!isObj(next.hooks)) throw new Error(t('err.hooksNotObject'))
   const hooks = next.hooks
   const list = (k: string): unknown[] => {
     if (!Array.isArray(hooks[k])) hooks[k] = []

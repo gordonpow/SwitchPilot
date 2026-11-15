@@ -1,5 +1,6 @@
 // 偵測執行中的 claude CLI 與其 session／父 shell，並產生接續指令。
 // 純邏輯 + 可注入的程序列表；不 import electron（statusline 腳本也會打包本檔）。
+import { t } from '../shared/i18n'
 import { execFile, execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -88,7 +89,7 @@ const PS_ARGS = ['-NoProfile', '-NonInteractive', '-Command', PS_PROC_QUERY]
  */
 export function psAncestorQuery(startPid: number): string {
   const n = Math.trunc(Number(startPid))
-  if (!Number.isInteger(n) || n <= 0) throw new Error('無效的起始 PID')
+  if (!Number.isInteger(n) || n <= 0) throw new Error(t('err.badPid'))
   return (
     '[Console]::OutputEncoding=[Text.Encoding]::UTF8;' +
     `$id=${n};$list=@();$extra=-1;` +

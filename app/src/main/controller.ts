@@ -27,6 +27,12 @@ import * as storage from '../core/storage'
 import * as switchplan from '../core/switchplan'
 import * as usage from '../core/usage'
 import * as dispatchlog from '../core/dispatchlog'
+import {
+  getLanguage,
+  resolveLanguage,
+  setLanguage,
+  t
+} from '../shared/i18n'
 import type {
   AccountView,
   AgyAccountView,
@@ -72,7 +78,7 @@ const AGY_LOCK_STALE_MS = 70 * 60 * 1000
 /** access token 剩餘時間低於此值視為過期，不查額度 */
 const AGY_TOKEN_MARGIN_MS = 60_000
 const AGY_DEFAULT_VERSION = '1.5.8'
-const AGY_BUSY_MSG = 'agy 正在被派工使用中'
+const agyBusyMsg = (): string => t('agy.busyDispatch')
 const SAFE_SESSION_RE = /^[0-9A-Za-z-]{1,64}$/
 
 /** 每個 session 的 turn 相關事件時間（unix 秒）；自動整理用。 */
@@ -194,8 +200,8 @@ function defaultLaunchAgyLogin(): void {
   const wt = whichFirst(['wt.exe'], (process.env.PATH ?? '') + (extra ? ';' + extra : ''))
   const opts = { env: { ...process.env }, detached: true, stdio: 'ignore' as const }
   const child = wt
-    ? spawn(wt, ['-w', 'new', '--title', 'agy 登入', agy], opts)
-    : spawn('cmd.exe', ['/d', '/c', 'start', 'agy 登入', agy], opts)
+    ? spawn(wt, ['-w', 'new', '--title', t('agy.loginTitle'), agy], opts)
+    : spawn('cmd.exe', ['/d', '/c', 'start', t('agy.loginTitle'), agy], opts)
   child.on('error', () => {})
   child.unref()
 }
@@ -402,6 +408,7 @@ export class Controller {
   constructor(deps: ControllerDeps = {}) {
     this.now = deps.now ?? Date.now
     this.cfg = config.load()
+    setLanguage(resolveLanguage(this.cfg.language))
     this.monitor = new Monitor(Number(this.cfg.threshold) || 95)
     this.monitor.waitTurnEnd = this.cfg.switch_mode === 'restart'
     this.poller =
@@ -485,17 +492,26 @@ export class Controller {
       /* 忽略 */
     }
     this.watermark = usage.readNewEvents(null).last
+    // 記下實際語言給外部腳本（statusline、runner）用：它們的系統語言來源（Intl）可能與 Electron 不同
+    if (this.cfg.language_resolved !== getLanguage()) {
+      try {
+        this.cfg = { ...this.cfg, language_resolved: getLanguage() }
+        config.save(this.cfg)
+      } catch {
+        /* 寫不進去時腳本退回自行判斷 */
+      }
+    }
     try {
       this.ensureScripts()
     } catch (e) {
-      this.log('warn', `無法安裝腳本：${errMsg(e)}`)
+      this.log('warn', t('log.scriptsInstallFailed', { error: errMsg(e) }))
     }
     try {
       this.applyLoginItemFn?.(!!this.cfg.launch_at_login)
     } catch (e) {
-      this.log('warn', `套用開機自動啟動失敗：${errMsg(e)}`)
+      this.log('warn', t('log.loginItemApplyFailed', { error: errMsg(e) }))
     }
-    this.log('info', `已啟動，載入 ${accounts.listSlots().length} 個帳號`)
+    this.log('info', t('log.started', { count: accounts.listSlots().length }))
     this.scheduleTick(0)
     if (!this.pollDisabled) this.schedulePoll(1000)
     if (this.scanEnabled) this.scheduleScan(1000)
@@ -677,13 +693,13 @@ export class Controller {
     const { cli, pct } = best
     const sid = cli.sessionId as string
     const cmd = ac.action === 'compact' ? '/compact' : '/clear'
-    const where = `${cli.cwd ?? '未知資料夾'}（PID ${cli.claudePid}）`
+    const where = t('common.where', { cwd: cli.cwd ?? t('common.unknownFolder'), pid: cli.claudePid })
     this.compactInFlight = true
     try {
       // 先設定並寫檔再送出，避免失敗或重啟後每個 tick 重試
       this.setLastCompact(sid, nowSec)
       if (await this.cli.injectSubmit(cli.claudePid, cmd)) {
-        this.log('info', `已在 ${where} 執行 ${cmd}（上下文 ${pct}）`)
+        this.log('info', t('log.cmdRan', { where, cmd, pct }))
         if (cmd === '/compact' && ac.clear_screen_after) {
           const u = usages.get(sid)
           const usedPct =
@@ -700,10 +716,10 @@ export class Controller {
           })
         }
       } else {
-        this.log('warn', `無法送出 ${cmd}：${where}`)
+        this.log('warn', t('log.cmdFailed', { cmd, where }))
       }
     } catch {
-      this.log('warn', `無法送出 ${cmd}：${where}`) // 錯誤內容可能含命令列，不記錄
+      this.log('warn', t('log.cmdFailed', { cmd, where })) // 錯誤內容可能含命令列，不記錄
     } finally {
       this.compactInFlight = false
     }
@@ -789,8 +805,8 @@ export class Controller {
               ? this.cli.injectCtrlKey(item.pid, 'L')
               : Promise.resolve(false))
             if (ok) {
-              const folder = item.cwd ?? rec.cwd ?? '未知資料夾'
-              this.log('info', `已清除 ${folder} 的畫面`)
+              const folder = item.cwd ?? rec.cwd ?? t('common.unknownFolder')
+              this.log('info', t('log.screenCleared', { folder }))
             }
           } catch {
             // 忽略錯誤，不把命令列往外洩漏
@@ -852,7 +868,7 @@ export class Controller {
     } catch {
       cur = null
     }
-    const curName = cur ?? '未儲存'
+    const curName = cur ?? t('tray.unsaved')
     let usages = new Map<string, usage.UsageFileRecord>()
     try {
       usages = this.latestUsageBySession()
@@ -896,7 +912,7 @@ export class Controller {
       this.clis = this.buildClis(found)
       this.clisScannedAt = Math.floor(this.nowSec())
     } catch (e) {
-      this.log('warn', `掃描 claude CLI 失敗：${errMsg(e)}`)
+      this.log('warn', t('log.cliScanFailed', { error: errMsg(e) }))
     }
     this.requestPush()
     return found
@@ -917,7 +933,7 @@ export class Controller {
 
   private requireNode(): string {
     const n = this.node()
-    if (!n) throw new ControllerError('找不到 Node.js，請先安裝 Node.js', 'NODE_MISSING')
+    if (!n) throw new ControllerError(t('err.nodeMissingInstall'), 'NODE_MISSING')
     return n
   }
 
@@ -932,7 +948,7 @@ export class Controller {
     try {
       await this.tickInner()
     } catch (e) {
-      this.log('error', `輪詢失敗：${errMsg(e)}`)
+      this.log('error', t('log.pollFailed', { error: errMsg(e) }))
     } finally {
       this.ticking = false
     }
@@ -962,7 +978,7 @@ export class Controller {
     if (action.kind === 'pending') {
       if (!this.pendingLogged) {
         this.pendingLogged = true
-        this.log('info', '已達門檻，等待回合結束後切換')
+        this.log('info', t('monitor.thresholdWaiting'))
       }
     } else {
       this.pendingLogged = false
@@ -993,7 +1009,7 @@ export class Controller {
         isObj(creds) && 'claudeAiOauth' in creds && accounts.credsBelongToOther(creds, slotId)
     }
     if (mismatch && !this.warnedMismatch) {
-      this.log('warn', '憑證檔與目前帳號不一致，暫不同步')
+      this.log('warn', t('log.credMismatch'))
     }
     this.warnedMismatch = mismatch
   }
@@ -1037,16 +1053,16 @@ export class Controller {
     }
     if (this.compactInFlight || lc.done.has(cli.sessionId)) return
     lc.done.add(cli.sessionId)
-    const where = `${cli.cwd ?? '未知資料夾'}（PID ${cli.claudePid}）`
+    const where = t('common.where', { cwd: cli.cwd ?? t('common.unknownFolder'), pid: cli.claudePid })
     this.compactInFlight = true
     try {
       if (await this.cli.injectSubmit(cli.claudePid, prompt)) {
-        this.log('info', `已在 ${where} 送出繼續提示`)
+        this.log('info', t('log.continueSent', { where }))
       } else {
-        this.log('warn', `無法送出繼續提示：${where}`)
+        this.log('warn', t('log.continueFailed', { where }))
       }
     } catch {
-      this.log('warn', `無法送出繼續提示：${where}`) // 錯誤內容可能含命令列，不記錄
+      this.log('warn', t('log.continueFailed', { where })) // 錯誤內容可能含命令列，不記錄
     } finally {
       this.compactInFlight = false
     }
@@ -1082,7 +1098,7 @@ export class Controller {
       sl = null
       if (!this.foreignLogged) {
         this.foreignLogged = true
-        this.log('info', 'statusline 用量仍是切換前帳號的資料，暫不採用')
+        this.log('info', t('log.statuslineStale'))
       }
     }
     let best: {
@@ -1120,7 +1136,7 @@ export class Controller {
     try {
       ran = await p
     } catch (e) {
-      this.log('error', `查詢用量失敗：${errMsg(e)}`)
+      this.log('error', t('log.usageQueryFailed', { error: errMsg(e) }))
     }
     if (ran) this.lastPollAt = Math.floor(this.nowSec())
     this.requestPush()
@@ -1137,26 +1153,26 @@ export class Controller {
       }
       this.noTargetUntil = 0
       this.warnedExhaust = false
-      this.log('info', '已清除所有帳號的用完標記')
+      this.log('info', t('log.exhaustedCleared'))
       this.requestPush()
       return ok
     } catch (e) {
-      return fail(`清除用完標記失敗：${errMsg(e)}`)
+      return fail(t('err.clearExhaustedFailed', { error: errMsg(e) }))
     }
   }
 
   async refreshUsage(): Promise<Result> {
-    if (this.pollDisabled) return fail('用量輪詢已停用', 'INVALID')
+    if (this.pollDisabled) return fail(t('err.pollDisabled'), 'INVALID')
     if (this.poller.running || this.switching)
-      return fail('用量查詢正在進行中或切換中，請稍後再試', 'BUSY')
+      return fail(t('err.pollBusy'), 'BUSY')
     const ran = await this.pollNow()
-    return ran ? ok : fail('用量查詢正在進行中或切換中，請稍後再試', 'BUSY')
+    return ran ? ok : fail(t('err.pollBusy'), 'BUSY')
   }
 
   // ---------- 切換流程 ----------
   private slotName(id: string | null): string {
     const s = id ? accounts.getSlot(id) : null
-    return s?.name || id || '未儲存'
+    return s?.name || id || t('tray.unsaved')
   }
 
   private isBlocked(slot: accounts.Slot): boolean {
@@ -1170,7 +1186,7 @@ export class Controller {
       try {
         this.launcher.abortRestart(r)
       } catch (e) {
-        this.log('error', `中止重啟失敗：${errMsg(e)}`)
+        this.log('error', t('log.abortRestartFailed', { error: errMsg(e) }))
       }
     }
   }
@@ -1182,7 +1198,7 @@ export class Controller {
     auto: boolean
     restartRuns: boolean
   }): Promise<Result> {
-    if (this.switching) return fail('正在切換中，請稍候', 'BUSY')
+    if (this.switching) return fail(t('err.switching'), 'BUSY')
     this.switching = true
     this.requestPush()
     try {
@@ -1209,37 +1225,40 @@ export class Controller {
           if (!nxt || nxt.id === current || !this.poller.ensureFresh) break
           if ((await this.poller.ensureFresh(nxt.id)) !== 'dead') break
           failed.add(nxt.id)
-          this.log('warn', `帳號「${this.slotName(nxt.id)}」token 已失效，改挑下一個帳號`)
+          this.log('warn', t('log.tokenInvalidSkip', { name: this.slotName(nxt.id) }))
           nxt = null
         }
         if (!nxt) {
           this.noTargetUntil = nowSec + NO_TARGET_PAUSE_S
           if (!this.warnedExhaust) {
             this.warnedExhaust = true
-            this.log('warn', '所有帳號都已用完，不切換')
+            this.log('warn', t('log.allExhausted'))
             const er = switchplan.earliestReset(slots, nowSec)
             this.notify(
-              '所有帳號都已用完',
-              '沒有可切換的帳號。最早重置時間：' + (er ? fmtTs(er) : '未知')
+              t('notify.allExhaustedTitle'),
+              t('notify.allExhaustedBody', { time: er ? fmtTs(er) : t('common.unknown') })
             )
           }
           this.monitor.reset(nowSec)
-          return fail('所有帳號都已用完，不切換', 'BUSY')
+          return fail(t('log.allExhausted'), 'BUSY')
         }
         target = nxt.id
       }
-      if (!target) return fail('未指定要切換的帳號', 'INVALID')
+      if (!target) return fail(t('err.noTarget'), 'INVALID')
       const tid = target
       if (!p.auto && tid !== current) {
         const ts = accounts.getSlot(tid)
-        if (ts && needsRelogin(ts)) return fail('此帳號需要重新登入', 'INVALID')
+        if (ts && needsRelogin(ts)) return fail(t('err.needsRelogin'), 'INVALID')
         if (this.poller.ensureFresh && (await this.poller.ensureFresh(tid)) === 'dead') {
-          return fail('此帳號需要重新登入', 'INVALID')
+          return fail(t('err.needsRelogin'), 'INVALID')
         }
       }
       const notifyAuto = (): void => {
         if (p.auto) {
-          this.notify('已自動切換帳號', `已切換到「${this.slotName(tid)}」（${p.reason}）`)
+          this.notify(
+            t('notify.autoSwitchedTitle'),
+            t('notify.autoSwitchedBody', { name: this.slotName(tid), reason: p.reason })
+          )
         }
       }
 
@@ -1250,24 +1269,24 @@ export class Controller {
             lockCur ? withSlotLock(lockCur, () => accounts.switchTo(tid)) : accounts.switchTo(tid)
           )
         } catch (e) {
-          this.log('error', `切換帳號失敗：${errMsg(e)}`)
+          this.log('error', t('log.switchAccountFailed', { error: errMsg(e) }))
           return fail(
-            `切換帳號失敗：${errMsg(e)}`,
+            t('log.switchAccountFailed', { error: errMsg(e) }),
             e instanceof accounts.AccountError ? 'INVALID' : 'UNKNOWN'
           )
         }
-        const t = this.nowSec()
-        this.monitor.reset(t)
+        const ts = this.nowSec()
+        this.monitor.reset(ts)
         // 切換期間使用者可能改了模式，確認仍是 live 才設定接續視窗
         if (this.cfg.switch_mode === 'live') {
-          this.monitor.ignoreFailuresUntil = t + LIVE_WINDOW_S
-          this.liveContinue = { until: t + LIVE_WINDOW_S, done: new Set() }
+          this.monitor.ignoreFailuresUntil = ts + LIVE_WINDOW_S
+          this.liveContinue = { until: ts + LIVE_WINDOW_S, done: new Set() }
         }
         this.pendingLogged = false
         this.warnedExhaust = false
         this.foreignLogged = false
         this.noTargetUntil = 0
-        this.log('info', `切換：${this.slotName(current)} → ${this.slotName(tid)}（${p.reason}）`)
+        this.log('info', t('log.switched', { from: this.slotName(current), to: this.slotName(tid), reason: p.reason }))
         notifyAuto()
         // 換帳號之後才掃描並送提示，掃描不會延遲換帳號
         const scan = this.scanEnabled ? await this.scanNow() : []
@@ -1299,20 +1318,20 @@ export class Controller {
         } catch (err) {
           // 其他 CLI 尚未動到：中止已要求重啟的託管視窗，不切換
           this.abortRuns(requested)
-          this.log('error', `要求重啟失敗：${errMsg(err)}`)
-          return fail(`要求重啟失敗：${errMsg(err)}`, 'UNKNOWN')
+          this.log('error', t('log.restartRequestFailed', { error: errMsg(err) }))
+          return fail(t('log.restartRequestFailed', { error: errMsg(err) }), 'UNKNOWN')
         }
       }
       for (const e of externals) {
-        const where = `${e.cli.cwd ?? '未知資料夾'}（PID ${e.cli.claudePid}）`
+        const where = t('common.where', { cwd: e.cli.cwd ?? t('common.unknownFolder'), pid: e.cli.claudePid })
         try {
           if (await this.cli.kill(e.cli.claudePid)) {
-            this.log('info', `已結束外部 claude：${where}`)
+            this.log('info', t('log.externalKilled', { where }))
           } else {
-            this.log('warn', `無法結束 claude：${where}`)
+            this.log('warn', t('log.killFailed', { where }))
           }
         } catch {
-          this.log('warn', `無法結束 claude：${where}`) // 錯誤內容可能含命令列，不記錄
+          this.log('warn', t('log.killFailed', { where })) // 錯誤內容可能含命令列，不記錄
         }
       }
       this.requestPush()
@@ -1333,8 +1352,8 @@ export class Controller {
       if (stillAlive()) {
         this.abortRuns(runs)
         await resumeDead()
-        this.log('error', '切換中止：claude 未結束')
-        return fail('切換中止：claude 未在時限內結束', 'BUSY')
+        this.log('error', t('log.switchAborted'))
+        return fail(t('err.switchAbortedTimeout'), 'BUSY')
       }
 
       try {
@@ -1346,9 +1365,9 @@ export class Controller {
       } catch (e) {
         this.abortRuns(runs)
         await resumeDead()
-        this.log('error', `切換帳號失敗：${errMsg(e)}`)
+        this.log('error', t('log.switchAccountFailed', { error: errMsg(e) }))
         return fail(
-          `切換帳號失敗：${errMsg(e)}`,
+          t('log.switchAccountFailed', { error: errMsg(e) }),
           e instanceof accounts.AccountError ? 'INVALID' : 'UNKNOWN'
         )
       }
@@ -1371,18 +1390,18 @@ export class Controller {
             this.launcher.releaseRestart(ri.run)
           }
         } catch (e) {
-          this.log('error', `放行重啟失敗：${errMsg(e)}`)
+          this.log('error', t('log.releaseRestartFailed', { error: errMsg(e) }))
         }
       }
       for (const e of externals) await this.resumeExternal(e.cli, e.interrupted)
       this.warnedExhaust = false
       this.foreignLogged = false
-      this.log('info', `切換：${this.slotName(current)} → ${this.slotName(tid)}（${p.reason}）`)
+      this.log('info', t('log.switched', { from: this.slotName(current), to: this.slotName(tid), reason: p.reason }))
       notifyAuto()
       return ok
     } catch (e) {
-      this.log('error', `切換失敗：${errMsg(e)}`)
-      return fail(`切換失敗：${errMsg(e)}`)
+      this.log('error', t('log.switchFailed', { error: errMsg(e) }))
+      return fail(t('log.switchFailed', { error: errMsg(e) }))
     } finally {
       this.switching = false
       this.requestPush()
@@ -1396,11 +1415,11 @@ export class Controller {
 
   /** 接續一個外部 CLI：優先寫入原視窗，失敗或不可寫入就開新分頁。log 只寫資料夾與 PID。 */
   private async resumeExternal(cli: sessions.DetectedCli, interrupted: boolean): Promise<void> {
-    const where = `${cli.cwd ?? '未知資料夾'}（PID ${cli.claudePid}）`
+    const where = t('common.where', { cwd: cli.cwd ?? t('common.unknownFolder'), pid: cli.claudePid })
     try {
       const plan = sessions.planResume(cli, this.promptFor(interrupted))
       if (plan.method === 'none' || !cli.sessionId) {
-        this.log('warn', `無法接續 ${where}`)
+        this.log('warn', t('log.resumeFailed', { where }))
         return
       }
       if (plan.method === 'inject' && plan.line && cli.shellPid) {
@@ -1414,17 +1433,17 @@ export class Controller {
           }
         }
         if (okInject) {
-          this.log('info', `已在原視窗接續 ${where}`)
+          this.log('info', t('log.resumedInPlace', { where }))
           return
         }
       }
       if (!cli.cwd) {
-        this.log('warn', `無法開新視窗接續 ${where}`)
+        this.log('warn', t('log.resumeWindowFailed', { where }))
         return
       }
       const node = this.node()
       if (!node) {
-        this.log('warn', `找不到 Node.js，無法開新視窗接續 ${where}`)
+        this.log('warn', t('log.resumeNoNode', { where }))
         return
       }
       const prompt = this.promptFor(interrupted)
@@ -1436,9 +1455,9 @@ export class Controller {
         ...(prompt ? { prompt } : {}),
         ...(extra.length ? { extraArgs: extra } : {})
       })
-      this.log('info', `已在新視窗接續 ${where}`)
+      this.log('info', t('log.resumedNewWindow', { where }))
     } catch (e) {
-      this.log('error', `接續失敗 ${where}：${errMsg(e)}`)
+      this.log('error', t('log.resumeError', { where, error: errMsg(e) }))
     }
   }
 
@@ -1466,23 +1485,23 @@ export class Controller {
   saveCurrent(name: string): Promise<Result> {
     return this.guard(async () => {
       const n = String(name ?? '').trim()
-      if (!n) return fail('名稱不可為空', 'INVALID')
+      if (!n) return fail(t('err.nameEmpty'), 'INVALID')
       const existing = accounts.matchSlot(accounts.currentAccount())
       const slot = await withSlotLock(existing?.id ?? '__new__', () => accounts.saveCurrent(n))
-      this.log('info', `已儲存帳號：${slot.name}（${slot.email}）`)
+      this.log('info', t('log.accountSaved', { name: slot.name, email: slot.email }))
       return ok
     })
   }
 
   switchTo(id: string, restartRuns: boolean): Promise<Result> {
     return this.guard(async () => {
-      if (this.switching) return fail('正在切換中，請稍候', 'BUSY')
-      if (!accounts.getSlot(id)) return fail('找不到指定的帳號', 'INVALID')
+      if (this.switching) return fail(t('err.switching'), 'BUSY')
+      if (!accounts.getSlot(id)) return fail(t('err.accountNotFound'), 'INVALID')
       const current = accounts.currentSlotId()
-      if (id === current) return fail('這已經是使用中的帳號', 'INVALID')
+      if (id === current) return fail(t('err.alreadyActive'), 'INVALID')
       return this.runSwitch({
         target: id,
-        reason: restartRuns ? '手動切換並重啟' : '手動切換',
+        reason: restartRuns ? t('switch.manualRestart') : t('switch.manual'),
         exhaustedUntil: 0,
         auto: false,
         restartRuns: !!restartRuns
@@ -1500,14 +1519,14 @@ export class Controller {
   deleteSlot(id: string): Promise<Result> {
     return this.guard(async () => {
       const name = this.slotName(id)
-      if (id === accounts.currentSlotId()) return fail('無法刪除使用中的帳號', 'IN_USE')
+      if (id === accounts.currentSlotId()) return fail(t('err.cannotDeleteActive'), 'IN_USE')
       await withSlotLock(id, () => accounts.deleteSlot(id))
       try {
         fs.rmSync(path.join(paths.usageApiDir(), `${id}.json`), { force: true })
       } catch {
         /* 忽略 */
       }
-      this.log('info', `已刪除帳號：${name}`)
+      this.log('info', t('log.accountDeleted', { name }))
       return ok
     })
   }
@@ -1516,37 +1535,42 @@ export class Controller {
     return this.guard(() => {
       const next: config.Config = { ...this.cfg }
       if (patch.threshold !== undefined) {
-        const t = Number(patch.threshold)
-        if (!Number.isFinite(t)) return fail('門檻必須是數字', 'INVALID')
-        next.threshold = Math.min(100, Math.max(50, t))
+        const th = Number(patch.threshold)
+        if (!Number.isFinite(th)) return fail(t('err.thresholdNaN'), 'INVALID')
+        next.threshold = Math.min(100, Math.max(50, th))
       }
       if (patch.auto_switch !== undefined) next.auto_switch = !!patch.auto_switch
       if (patch.last_folder !== undefined) next.last_folder = String(patch.last_folder)
       if (patch.login_browser !== undefined) {
         if (!['chrome', 'edge', 'default'].includes(patch.login_browser)) {
-          return fail('不支援的瀏覽器設定', 'INVALID')
+          return fail(t('err.browserUnsupported'), 'INVALID')
         }
         next.login_browser = patch.login_browser
       }
       if (patch.usage_poll_seconds !== undefined) {
         const s = Number(patch.usage_poll_seconds)
-        if (!Number.isFinite(s)) return fail('更新間隔必須是數字', 'INVALID')
+        if (!Number.isFinite(s)) return fail(t('err.intervalNaN'), 'INVALID')
         next.usage_poll_seconds = Math.min(3600, Math.max(30, Math.round(s)))
       }
       if (patch.manage_external !== undefined) next.manage_external = !!patch.manage_external
       if (patch.continue_prompt !== undefined) {
         const v = config.validateContinuePrompt(patch.continue_prompt)
         if (v === null) {
-          return fail('提示不可超過 200 字，且不可含 " % ^ & | < > ; 或換行', 'INVALID')
+          return fail(t('err.promptInvalid'), 'INVALID')
         }
         next.continue_prompt = v
+      }
+      if (patch.language !== undefined) {
+        const l = config.validateLanguage(patch.language)
+        if (l === null) return fail(t('err.languageUnsupported'), 'INVALID')
+        next.language = l
       }
       if (patch.close_to_tray !== undefined) next.close_to_tray = !!patch.close_to_tray
       if (patch.launch_at_login !== undefined) next.launch_at_login = !!patch.launch_at_login
       let modeChanged = false
       if (patch.switch_mode !== undefined) {
         const m = config.validateSwitchMode(patch.switch_mode)
-        if (m === null) return fail('不支援的切換方式', 'INVALID')
+        if (m === null) return fail(t('err.switchModeUnsupported'), 'INVALID')
         modeChanged = m !== next.switch_mode
         next.switch_mode = m
       }
@@ -1554,7 +1578,7 @@ export class Controller {
         const merged = config.mergeAutoCompact(next.auto_compact, patch.auto_compact)
         if (merged === null) {
           return fail(
-            '自動整理設定不合法（門檻：百分比 1～99、token 1000～2000000；等待 5～600 秒）',
+            t('err.autoCompactInvalid'),
             'INVALID'
           )
         }
@@ -1564,10 +1588,19 @@ export class Controller {
         try {
           this.applyLoginItemFn?.(next.launch_at_login)
         } catch (e) {
-          return fail(`無法設定開機自動啟動：${errMsg(e)}`, 'UNKNOWN')
+          return fail(t('err.loginItemFailed', { error: errMsg(e) }), 'UNKNOWN')
         }
       }
+      const lang = resolveLanguage(next.language)
+      const langChanged = lang !== getLanguage()
+      if (langChanged) {
+        // 未自訂的接續提示（內建預設之一）跟著換成新語言的預設
+        next.continue_prompt = config.localizeContinuePrompt(next.continue_prompt, lang)
+      }
+      // 外部腳本（statusline、runner）讀這個欄位，確保與主程式使用相同語言
+      next.language_resolved = lang
       config.save(next)
+      if (langChanged) setLanguage(lang)
       this.cfg = next
       this.monitor.waitTurnEnd = next.switch_mode === 'restart'
       if (next.switch_mode === 'restart') {
@@ -1578,6 +1611,7 @@ export class Controller {
       if (
         patch.switch_mode !== undefined ||
         patch.continue_prompt !== undefined ||
+        langChanged ||
         patch.manage_external !== undefined
       ) {
         this.clis = this.buildClis(this.lastScan)
@@ -1593,7 +1627,7 @@ export class Controller {
       const node = this.requireNode()
       this.ensureScripts()
       integration.install({ nodePath: node, binDir: paths.binDir() })
-      this.log('info', '已安裝整合（備份在 backups 資料夾）。已開啟的 claude 需重開才會生效')
+      this.log('info', t('log.integrationInstalled'))
       return ok
     })
   }
@@ -1601,7 +1635,7 @@ export class Controller {
   uninstallIntegration(): Promise<Result> {
     return this.guard(() => {
       integration.uninstall({ binDir: paths.binDir() })
-      this.log('info', '已移除整合')
+      this.log('info', t('log.integrationRemoved'))
       return ok
     })
   }
@@ -1609,7 +1643,7 @@ export class Controller {
   launch(folder: string, cont: boolean): Promise<Result> {
     return this.guard(async () => {
       const f = String(folder ?? '').trim()
-      if (!f) return fail('請先選擇專案資料夾', 'INVALID')
+      if (!f) return fail(t('err.chooseFolder'), 'INVALID')
       const node = this.requireNode()
       this.ensureScripts()
       this.launcher.launch(f, !!cont, { node, binDir: paths.binDir() })
@@ -1618,7 +1652,7 @@ export class Controller {
         config.save(next)
         this.cfg = next
       }
-      this.log('info', `已啟動 claude：${f}${cont ? '（--continue）' : ''}`)
+      this.log('info', cont ? t('log.claudeLaunchedContinue', { folder: f }) : t('log.claudeLaunched', { folder: f }))
       return ok
     })
   }
@@ -1627,12 +1661,12 @@ export class Controller {
   startLogin(browser?: LoginBrowser, reloginSlotId?: string): Promise<Result> {
     return this.guard(async () => {
       if (this.loginSession || this.loginView.state !== 'idle') {
-        return fail('已有登入進行中', 'BUSY')
+        return fail(t('err.loginInProgress'), 'BUSY')
       }
       const node = this.requireNode()
       const b: LoginBrowser = browser ?? (this.cfg.login_browser as LoginBrowser)
       if (reloginSlotId && !accounts.getSlot(reloginSlotId)) {
-        return fail('找不到要重新登入的帳號', 'INVALID')
+        return fail(t('err.reloginNotFound'), 'INVALID')
       }
       this.ensureScripts()
       const session = this.createLogin({ node, binDir: paths.binDir(), browser: b })
@@ -1663,7 +1697,7 @@ export class Controller {
         startedAt: Math.floor(this.nowSec()),
         reloginSlotId: reloginSlotId ?? null
       }
-      this.log('info', reloginSlotId ? '已開始重新登入' : '已開始瀏覽器登入')
+      this.log('info', reloginSlotId ? t('log.reloginStarted') : t('log.browserLoginStarted'))
       this.scheduleLoginPoll(session)
       return ok
     })
@@ -1693,9 +1727,9 @@ export class Controller {
           this.loginView = {
             ...this.loginView,
             state: 'failed',
-            message: '登入逾時（超過 5 分鐘），已取消'
+            message: t('login.timeout')
           }
-          this.log('warn', '登入逾時')
+          this.log('warn', t('log.loginTimeout'))
         } else {
           const url = session.loginUrl()
           if (url !== this.loginView.url) this.loginView = { ...this.loginView, url }
@@ -1709,9 +1743,9 @@ export class Controller {
         this.loginView = {
           ...this.loginView,
           state: 'failed',
-          message: '登入失敗：' + (lines.length ? lines.join(' / ') : '（無輸出）')
+          message: t('login.failed', { detail: lines.length ? lines.join(' / ') : t('common.noOutput') })
         }
-        this.log('error', this.loginView.message ?? '登入失敗')
+        this.log('error', this.loginView.message ?? t('login.failedPlain'))
         return
       }
       // done
@@ -1722,7 +1756,7 @@ export class Controller {
       const matched = accounts.matchSlot(account)
       const relogin = this.loginView.reloginSlotId
       if (relogin && (!matched || matched.id !== relogin)) {
-        this.log('warn', '登入的帳號與要重新登入的帳號不同，將依登入的帳號儲存')
+        this.log('warn', t('log.loginAccountMismatch'))
       }
       const baseName = relogin ? accounts.getSlot(relogin)?.name : matched?.name
       this.loginResult = { creds, account }
@@ -1730,7 +1764,7 @@ export class Controller {
         ...this.loginView,
         state: 'awaiting_name',
         email: email || null,
-        defaultName: baseName || email || '新帳號',
+        defaultName: baseName || email || t('common.newAccount'),
         url: null
       }
     } catch (e) {
@@ -1741,8 +1775,8 @@ export class Controller {
       } catch {
         /* 忽略 */
       }
-      this.loginView = { ...this.loginView, state: 'failed', message: `登入失敗：${errMsg(e)}` }
-      this.log('error', this.loginView.message ?? '登入失敗')
+      this.loginView = { ...this.loginView, state: 'failed', message: t('login.failed', { detail: errMsg(e) }) }
+      this.log('error', this.loginView.message ?? t('login.failedPlain'))
     } finally {
       this.requestPush()
     }
@@ -1757,10 +1791,10 @@ export class Controller {
     try {
       if (session) {
         await session.cancel()
-        this.log('info', '已取消瀏覽器登入')
+        this.log('info', t('log.browserLoginCancelled'))
       }
     } catch (e) {
-      this.log('error', `取消登入失敗：${errMsg(e)}`)
+      this.log('error', t('log.loginCancelFailed', { error: errMsg(e) }))
     }
     this.loginView = idleLogin()
     this.requestPush()
@@ -1771,19 +1805,19 @@ export class Controller {
     return this.guard(async () => {
       const res = this.loginResult
       if (this.loginView.state !== 'awaiting_name' || !res) {
-        return fail('目前沒有等待命名的登入', 'INVALID')
+        return fail(t('err.noPendingName'), 'INVALID')
       }
       const email = typeof res.account.emailAddress === 'string' ? res.account.emailAddress : ''
-      const finalName = String(name ?? '').trim() || this.loginView.defaultName || email || '新帳號'
+      const finalName = String(name ?? '').trim() || this.loginView.defaultName || email || t('common.newAccount')
       const matched = accounts.matchSlot(res.account)
       const slot = await withSlotLock(matched?.id ?? '__new__', () =>
         accounts.addSlot(finalName, res.creds, res.account)
       )
       if (slot.id === accounts.currentSlotId()) {
         await withSlotLock(slot.id, () => storage.writeJsonAtomic(paths.credFile(), res.creds))
-        this.log('info', '已更新目前登入憑證，執行中的 claude 下一個請求即使用新憑證')
+        this.log('info', t('log.credUpdated'))
       }
-      this.log('info', `${matched ? '已更新' : '已新增'}帳號 ${finalName}（${email}）`)
+      this.log('info', t(matched ? 'log.accountUpdated' : 'log.accountAdded', { name: finalName, email }))
       this.loginResult = null
       this.loginView = idleLogin()
       if (!this.pollDisabled) void this.pollNow()
@@ -1794,10 +1828,10 @@ export class Controller {
   copyLoginUrl(): Promise<Result> {
     return this.guard(() => {
       const url = this.loginSession?.loginUrl() ?? this.loginView.url
-      if (!url) return fail('登入網址尚未準備好，請稍候再試', 'INVALID')
-      if (!this.copyText) return fail('無法存取剪貼簿')
+      if (!url) return fail(t('err.loginUrlNotReady'), 'INVALID')
+      if (!this.copyText) return fail(t('err.clipboardUnavailable'))
       this.copyText(url)
-      this.log('info', '已複製登入網址')
+      this.log('info', t('log.loginUrlCopied'))
       return ok
     })
   }
@@ -1818,7 +1852,7 @@ export class Controller {
     try {
       cur = await this.agyOps.read()
     } catch (e) {
-      this.log('warn', `讀取 agy 登入資料失敗：${errMsg(e)}`)
+      this.log('warn', t('log.agyReadFailed', { error: errMsg(e) }))
       return null
     }
     if (!cur) {
@@ -1841,7 +1875,7 @@ export class Controller {
     if (!lock) return // 派工或另一個程序使用中，下次再處理
     if (dispatchlog.listRunning().length > 0) {
       lock.release()
-      this.log('warn', '有派工正在使用 agy，略過還原暫存登入')
+      this.log('warn', t('log.agyDispatchSkipRestore'))
       return
     }
     try {
@@ -1851,7 +1885,7 @@ export class Controller {
       try {
         cur = await this.agyOps.read()
       } catch (e) {
-        this.log('warn', `讀取 agy 登入資料失敗，暫不還原：${errMsg(e)}`)
+        this.log('warn', t('log.agyReadFailedNoRestore', { error: errMsg(e) }))
         return
       }
       if (isObj(rec) && valid && !cur) {
@@ -1859,13 +1893,13 @@ export class Controller {
           user: typeof rec.user === 'string' ? rec.user : '',
           blob: rec.blob as string
         })
-        this.log('info', '已還原上次中斷的新增 agy 帳號流程所暫存的登入')
+        this.log('info', t('log.agyRestored'))
       } else {
-        this.log('info', '已移除過期的 agy 登入暫存檔')
+        this.log('info', t('log.agyBackupExpired'))
       }
       fs.rmSync(file, { force: true })
     } catch (e) {
-      this.log('error', `還原 agy 登入暫存失敗：${errMsg(e)}`)
+      this.log('error', t('log.agyRestoreBackupFailed', { error: errMsg(e) }))
     } finally {
       lock.release()
       await this.refreshAgyCurrent()
@@ -1905,7 +1939,7 @@ export class Controller {
           try {
             await agyacc.syncCurrentAgyBack(this.agyOps)
           } catch (e) {
-            this.log('warn', `同步 agy 登入失敗：${errMsg(e)}`)
+            this.log('warn', t('log.agySyncFailed', { error: errMsg(e) }))
           } finally {
             lock.release()
           }
@@ -1930,12 +1964,12 @@ export class Controller {
             writeAgyQuota(slot.id, q)
           }
         } catch (e) {
-          this.log('warn', `儲存 agy 額度失敗：${errMsg(e)}`)
+          this.log('warn', t('log.agyQuotaSaveFailed', { error: errMsg(e) }))
         }
       }
       return true
     } catch (e) {
-      this.log('error', `查詢 agy 額度失敗：${errMsg(e)}`)
+      this.log('error', t('log.agyQuotaQueryFailed', { error: errMsg(e) }))
       return true
     } finally {
       this.agyQuerying = false
@@ -1945,8 +1979,8 @@ export class Controller {
 
   agyRefreshQuota(): Promise<Result> {
     return this.guard(async () => {
-      if (this.pollDisabled) return fail('agy 額度查詢已停用', 'INVALID')
-      if (this.agyQuerying) return fail('agy 額度查詢正在進行中，請稍後再試', 'BUSY')
+      if (this.pollDisabled) return fail(t('err.agyQuotaDisabled'), 'INVALID')
+      if (this.agyQuerying) return fail(t('err.agyQuotaBusy'), 'BUSY')
       await this.agyPollOnce()
       return ok
     })
@@ -1954,10 +1988,10 @@ export class Controller {
 
   /** 在持有 agy 鎖時執行一個 agy 帳號操作。 */
   private async withAgyLock(fn: () => Promise<Result>): Promise<Result> {
-    if (this.agyLoginCtx) return fail('新增 agy 帳號進行中，請先完成或取消', 'BUSY')
-    if (this.agyBusyOp) return fail('另一個 agy 操作進行中，請稍候', 'BUSY')
+    if (this.agyLoginCtx) return fail(t('err.agyAddInProgress'), 'BUSY')
+    if (this.agyBusyOp) return fail(t('err.agyOpBusy'), 'BUSY')
     const lock = this.agyLock()
-    if (!lock) return fail(AGY_BUSY_MSG, 'BUSY')
+    if (!lock) return fail(agyBusyMsg(), 'BUSY')
     this.agyBusyOp = true
     try {
       return await fn()
@@ -1977,7 +2011,7 @@ export class Controller {
     return this.guard(() =>
       this.withAgyLock(async () => {
         const slot = await agyacc.saveCurrentAgy(this.agyOps, String(name ?? ''))
-        this.log('info', `已儲存 agy 帳號：${slot.name}（${slot.email}）`)
+        this.log('info', t('log.agySaved', { name: slot.name, email: slot.email }))
         this.afterAgyChange()
         return ok
       })
@@ -1988,17 +2022,17 @@ export class Controller {
     return this.guard(() =>
       this.withAgyLock(async () => {
         const target = agyacc.listAgySlots().find((s) => s.id === id)
-        if (!target) return fail('找不到指定的 agy 帳號', 'INVALID')
+        if (!target) return fail(t('err.agyAccountNotFound'), 'INVALID')
         if (dispatchlog.listRunning().length > 0) {
-          return fail('有派工正在使用 agy，請稍後再試', 'BUSY')
+          return fail(t('err.agyDispatchBusy'), 'BUSY')
         }
         try {
           await agyacc.switchAgy(this.agyOps, id, () => this.isAgyRunning())
         } catch (e) {
-          if (e instanceof agyacc.AgyBusyError) return fail('請先關閉所有 agy 再切換', 'BUSY')
+          if (e instanceof agyacc.AgyBusyError) return fail(t('err.agyCloseBeforeSwitch'), 'BUSY')
           throw e
         }
-        this.log('info', `已切換 agy 帳號：${target.name}`)
+        this.log('info', t('log.agySwitched', { name: target.name }))
         this.afterAgyChange()
         return ok
       })
@@ -2015,14 +2049,14 @@ export class Controller {
   agyDelete(id: string): Promise<Result> {
     return this.guard(async () => {
       const slot = agyacc.listAgySlots().find((s) => s.id === id)
-      if (!slot) return fail('找不到指定的 agy 帳號', 'INVALID')
+      if (!slot) return fail(t('err.agyAccountNotFound'), 'INVALID')
       await agyacc.deleteAgy(id)
       try {
         fs.rmSync(path.join(paths.agyQuotaDir(), `${id}.json`), { force: true })
       } catch {
         /* 忽略 */
       }
-      this.log('info', `已刪除 agy 帳號：${slot.name}`)
+      this.log('info', t('log.agyDeleted', { name: slot.name }))
       await this.refreshAgyCurrent()
       return ok
     })
@@ -2050,14 +2084,14 @@ export class Controller {
 
   agyStartLogin(): Promise<Result> {
     return this.guard(async () => {
-      if (this.agyLoginCtx || this.agyBusyOp) return fail('已有 agy 登入進行中', 'BUSY')
-      if (dispatchlog.listRunning().length > 0) return fail('有派工正在使用 agy，請稍後再試', 'BUSY')
-      if (await this.isAgyRunning()) return fail('請先關閉所有 agy', 'BUSY')
+      if (this.agyLoginCtx || this.agyBusyOp) return fail(t('err.agyLoginInProgress'), 'BUSY')
+      if (dispatchlog.listRunning().length > 0) return fail(t('err.agyDispatchBusy'), 'BUSY')
+      if (await this.isAgyRunning()) return fail(t('err.agyCloseAll'), 'BUSY')
       const lock = this.agyLock()
-      if (!lock) return fail(AGY_BUSY_MSG, 'BUSY')
+      if (!lock) return fail(agyBusyMsg(), 'BUSY')
       if (dispatchlog.listRunning().length > 0) {
         lock.release()
-        return fail('有派工正在使用 agy，請稍後再試', 'BUSY')
+        return fail(t('err.agyDispatchBusy'), 'BUSY')
       }
       let backup: AgyCred | null = null
       try {
@@ -2095,7 +2129,7 @@ export class Controller {
           }
         }
         lock.release()
-        const msg = `無法開始新增 agy 帳號：${errMsg(e)}${restoreFailed ? '（備份保留，重開程式會還原）' : ''}`
+        const msg = t(restoreFailed ? 'agy.startAddFailedBackup' : 'agy.startAddFailed', { error: errMsg(e) })
         this.setAgyLogin({ state: 'error', email: null, message: msg })
         await this.refreshAgyCurrent()
         return fail(msg)
@@ -2109,8 +2143,8 @@ export class Controller {
         detected: null
       }
       this.agyCur = { email: null, slotId: null, expiryMs: null }
-      this.setAgyLogin({ state: 'waiting', email: null, message: '請在開啟的視窗完成 agy 登入' })
-      this.log('info', '已開始新增 agy 帳號：請在新視窗完成登入')
+      this.setAgyLogin({ state: 'waiting', email: null, message: t('agy.loginPrompt') })
+      this.log('info', t('log.agyAddStarted'))
       this.scheduleAgyLoginPoll()
       return ok
     })
@@ -2133,7 +2167,7 @@ export class Controller {
     this.agyLoginBusy = true
     try {
       if (this.now() - ctx.startedMs > AGY_LOGIN_TIMEOUT_MS) {
-        await this.abortAgyLogin('登入逾時（超過 10 分鐘），已取消')
+        await this.abortAgyLogin(t('agy.loginTimeout'))
         return
       }
       let running = false
@@ -2160,7 +2194,7 @@ export class Controller {
         this.setAgyLogin({
           state: 'signed_in',
           email,
-          message: `已登入 ${email}，請關閉 agy 視窗以完成`
+          message: t('agy.loggedIn', { email })
         })
       }
       if (ctx.sawAgy && ctx.noAgyCount >= 2) await this.finishAgyLogin()
@@ -2172,18 +2206,18 @@ export class Controller {
   /** 結束流程：有新登入就先存成 slot，確認存檔成功才還原 backup；沒有新登入則只還原。 */
   private async finishAgyLogin(): Promise<Result> {
     const ctx = this.agyLoginCtx
-    if (!ctx) return fail('目前沒有進行中的 agy 登入', 'INVALID')
+    if (!ctx) return fail(t('err.agyNoLoginInProgress'), 'INVALID')
     let cur: AgyCred | null = null
     try {
       cur = await this.agyOps.read()
     } catch (e) {
-      this.log('warn', `讀取 agy 登入資料失敗：${errMsg(e)}`)
-      return fail('讀取 agy 登入資料失敗，請稍後再試')
+      this.log('warn', t('log.agyReadFailed', { error: errMsg(e) }))
+      return fail(t('err.agyReadRetry'))
     }
     const email = cur ? parseBlob(cur.blob).email : null
     if (!email) {
-      await this.abortAgyLogin('未偵測到新的 agy 登入，已結束流程')
-      return fail('未偵測到新的 agy 登入', 'INVALID')
+      await this.abortAgyLogin(t('agy.notDetectedAborted'))
+      return fail(t('err.agyNotDetected'), 'INVALID')
     }
     let slot: agyacc.AgySlot
     try {
@@ -2192,29 +2226,29 @@ export class Controller {
       this.setAgyLogin({
         state: 'error',
         email,
-        message: `儲存新帳號失敗：${errMsg(e)}（原帳號已存成帳號，可手動切回）`
+        message: t('agy.saveNewFailedMsg', { error: errMsg(e) })
       })
-      this.log('error', `儲存 agy 新帳號失敗：${errMsg(e)}`)
+      this.log('error', t('log.agySaveNewFailed', { error: errMsg(e) }))
       this.endAgyLogin()
-      return fail(`儲存新帳號失敗：${errMsg(e)}`)
+      return fail(t('err.agySaveNewFailed', { error: errMsg(e) }))
     }
     let restored = ''
     if (ctx.backup) {
       try {
         await this.agyOps.write(ctx.backup)
-        restored = '，已還原原本的登入'
+        restored = t('agy.noteRestoredSuffix')
       } catch (e) {
-        restored = '，但還原原本登入失敗（請用「切換」切回）'
-        this.log('error', `還原 agy 登入失敗：${errMsg(e)}`)
+        restored = t('agy.noteRestoreFailedSuffix')
+        this.log('error', t('log.agyRestoreLoginFailed', { error: errMsg(e) }))
       }
     }
     this.endAgyLogin()
     this.setAgyLogin({
       state: 'done',
       email,
-      message: `已新增 ${slot.name}（${email}）${restored}`
+      message: t('agy.added', { name: slot.name, email, note: restored })
     })
-    this.log('info', `已新增 agy 帳號：${slot.name}（${email}）${restored}`)
+    this.log('info', t('log.agyAdded', { name: slot.name, email, note: restored }))
     this.afterAgyChange()
     return ok
   }
@@ -2230,12 +2264,12 @@ export class Controller {
         const cur = await this.agyOps.read()
         if (!cur || !parseBlob(cur.blob).email) {
           await this.agyOps.write(ctx.backup)
-          note += '（已還原原本的登入）'
+          note += t('agy.noteRestored')
         }
       } catch (e) {
         keepBackup = true
-        note += '（還原失敗，備份保留在 agy/login-backup.json）'
-        this.log('error', `還原 agy 登入失敗：${errMsg(e)}`)
+        note += t('agy.noteRestoreFailed')
+        this.log('error', t('log.agyRestoreLoginFailed', { error: errMsg(e) }))
       }
     }
     if (keepBackup) {
@@ -2253,7 +2287,7 @@ export class Controller {
 
   agyCancelLogin(): Promise<Result> {
     return this.guard(async () => {
-      if (this.agyLoginCtx) await this.abortAgyLogin('已取消新增 agy 帳號')
+      if (this.agyLoginCtx) await this.abortAgyLogin(t('agy.addCancelled'))
       this.setAgyLogin({ state: 'idle', email: null, message: null })
       return ok
     })
@@ -2262,7 +2296,7 @@ export class Controller {
   /** 使用者按「完成」：已偵測到新登入時不等 agy 視窗關閉。 */
   agyFinishLogin(): Promise<Result> {
     return this.guard(async () => {
-      if (!this.agyLoginCtx?.detected) return fail('尚未偵測到新的 agy 登入', 'INVALID')
+      if (!this.agyLoginCtx?.detected) return fail(t('err.agyNotYetDetected'), 'INVALID')
       return this.finishAgyLogin()
     })
   }
@@ -2276,7 +2310,7 @@ export class Controller {
         if (e instanceof routingMod.RoutingError) return fail(e.message, 'INVALID')
         throw e
       }
-      this.log('info', '已儲存模型分工')
+      this.log('info', t('log.routingSaved'))
       return ok
     })
   }
@@ -2299,10 +2333,10 @@ export class Controller {
       if (api && api.error) {
         error =
           api.error === 'token_expired_active'
-            ? '使用中帳號的 token 已過期，改用 statusline 資料'
+            ? t('err.tokenExpiredActive')
             : api.error
       }
-      if (needsRelogin && !error) error = 'token 已過期，需要重新登入'
+      if (needsRelogin && !error) error = t('err.tokenExpired')
       const oauth = isObj(s.credentials) ? s.credentials.claudeAiOauth : null
       const sub =
         isObj(oauth) && typeof oauth.subscriptionType === 'string' ? oauth.subscriptionType : null
@@ -2413,6 +2447,7 @@ export class Controller {
     }
 
     return {
+      language: getLanguage(),
       agyAccounts: agyViews,
       agyLogin: { ...this.agyLoginView },
       agyCurrent: this.agyCur
@@ -2449,6 +2484,7 @@ export class Controller {
         switch_mode: this.cfg.switch_mode === 'restart' ? 'restart' : 'live',
         close_to_tray: !!this.cfg.close_to_tray,
         launch_at_login: !!this.cfg.launch_at_login,
+        language: config.validateLanguage(this.cfg.language) ?? 'auto',
         auto_compact: {
           ...this.cfg.auto_compact,
           folders: [...this.cfg.auto_compact.folders]

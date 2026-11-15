@@ -88,6 +88,12 @@ describe('statusline.cjs', () => {
     expect(rec.five_hour).toBeNull()
   })
 
+  it('CLAUDE_SWITCHER_LANG=en 且帳號未儲存：輸出英文字樣', () => {
+    const r = run('statusline', [], JSON.stringify({ session_id: 's-en' }), { CLAUDE_SWITCHER_LANG: 'en' })
+    expect(r.status).toBe(0)
+    expect(r.stdout.trim()).toBe('[Unsaved] 5h -- · 7d --')
+  })
+
   it('停用查詢時不寫 pidmap 以外也不會壞：有 session 仍寫失敗標記', () => {
     run('statusline', [], JSON.stringify({ session_id: 's9', cwd: 'C:/x' }))
     const m = readJson(path.join(pidmapDir(), 's9.json')) as Record<string, any>

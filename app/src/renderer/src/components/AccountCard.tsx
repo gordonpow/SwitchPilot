@@ -13,6 +13,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatRelative } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 import { UsageBar } from './UsageBar'
 
 interface Props {
@@ -36,6 +37,7 @@ export function AccountCard({
   onDelete,
   onRelogin
 }: Props): React.JSX.Element {
+  const t = useT()
   const u = a.usage
   const sourceLabel = u.source === 'api' ? 'API' : u.source === 'statusline' ? 'statusline' : null
   return (
@@ -47,12 +49,12 @@ export function AccountCard({
               <button
                 type="button"
                 onClick={onRename}
-                title="點擊重新命名"
+                title={t('accounts.clickRename')}
                 className="truncate rounded-sm text-left text-base font-semibold outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 {a.name}
               </button>
-              {a.active && <Badge>使用中</Badge>}
+              {a.active && <Badge>{t('accounts.active')}</Badge>}
               <Badge variant="secondary" className="text-[10px]">
                 Claude
               </Badge>
@@ -62,26 +64,26 @@ export function AccountCard({
                 </Badge>
               )}
             </div>
-            <p className="truncate text-xs text-muted-foreground">{a.email || '（未知 email）'}</p>
+            <p className="truncate text-xs text-muted-foreground">{a.email || t('accounts.unknownEmail')}</p>
           </div>
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label={`${a.name} 的更多操作`}>
+                  <Button variant="ghost" size="icon-sm" aria-label={t('accounts.moreActionsAria', { name: a.name })}>
                     <MoreVertical />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent>更多操作</TooltipContent>
+              <TooltipContent>{t('accounts.moreActions')}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={onRename}>
-                <Pencil /> 重新命名
+                <Pencil /> {t('common.rename')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" disabled={a.active} onSelect={onDelete}>
-                <Trash2 /> {a.active ? '刪除（使用中不可刪）' : '刪除'}
+                <Trash2 /> {a.active ? t('accounts.deleteActiveDisabled') : t('common.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -94,10 +96,10 @@ export function AccountCard({
           >
             <span className="flex items-center gap-1.5">
               <AlertTriangle className="size-3.5 shrink-0" />
-              需要重新登入
+              {t('accounts.needsRelogin')}
             </span>
             <Button size="xs" variant="outline" onClick={onRelogin} disabled={busy}>
-              <LogIn /> 重新登入
+              <LogIn /> {t('accounts.relogin')}
             </Button>
           </div>
         )}
@@ -108,21 +110,21 @@ export function AccountCard({
         )}
 
         <div className={cn('space-y-3 transition-opacity', u.stale && 'opacity-50')}>
-          <UsageBar label="5 小時" window={u.five_hour} threshold={threshold} />
-          <UsageBar label="7 天" window={u.seven_day} threshold={threshold} />
+          <UsageBar label={t('usage.fiveHour')} window={u.five_hour} threshold={threshold} />
+          <UsageBar label={t('usage.sevenDay')} window={u.seven_day} threshold={threshold} />
         </div>
 
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5 tabular-nums">
-            {u.updatedAt ? `${formatRelative(u.updatedAt, now)}更新` : '尚無用量資料'}
+            {u.updatedAt ? t('accounts.updatedAt', { time: formatRelative(u.updatedAt, now) }) : t('accounts.noUsageData')}
             {sourceLabel && <Badge variant="secondary">{sourceLabel}</Badge>}
             {u.stale && (
               <Badge variant="outline" className="border-amber-500/40 text-amber-300">
-                資料過舊
+                {t('accounts.staleData')}
               </Badge>
             )}
           </span>
-          {a.exhaustedUntil > now / 1000 && <span className="text-red-400">已標記用完</span>}
+          {a.exhaustedUntil > now / 1000 && <span className="text-red-400">{t('accounts.exhausted')}</span>}
         </div>
 
         <Button
@@ -131,7 +133,7 @@ export function AccountCard({
           disabled={a.active || busy}
           onClick={onSwitch}
         >
-          <ArrowRightLeft /> {a.active ? '目前使用中' : '切換到此帳號'}
+          <ArrowRightLeft /> {a.active ? t('accounts.currentlyActive') : t('accounts.switchTo')}
         </Button>
       </CardContent>
     </Card>

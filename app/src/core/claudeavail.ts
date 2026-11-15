@@ -1,4 +1,5 @@
 // Claude 可用性檢查（AC-13'、R-5）。不 import electron、不 import oauth。
+import { t } from '../shared/i18n'
 import * as path from 'node:path'
 import * as accounts from './accounts'
 import * as config from './config'
@@ -74,7 +75,7 @@ export function claudeAvailable(
 ): { available: boolean; reason: string } {
   const slots = accounts.listSlots()
   if (slots.length === 0) {
-    return { available: true, reason: '無儲存的 Claude 帳號，視為可用' }
+    return { available: true, reason: t('avail.noSaved') }
   }
 
   const thr = threshold !== undefined ? threshold : Number(config.load().threshold) || 95
@@ -88,5 +89,5 @@ export function claudeAvailable(
     }
   }
 
-  return { available: false, reason: '所有 Claude 帳號均不可用' }
+  return { available: false, reason: t('avail.allUnavailable') }
 }

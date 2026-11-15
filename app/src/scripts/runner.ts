@@ -1,6 +1,7 @@
 // 在 Windows Terminal 中執行，託管 claude；主程式透過 cmd 檔要求重啟。
 // 用法：runner.cjs --run-id ID --cwd DIR [--continue] [--resume ID] [--prompt-b64 B] [--extra-args-b64 B]
 //        [--claude PATH] [--no-pause] [--wait-timeout SEC]
+import { resolveLanguage, setLanguage, t, resolveLanguageFromConfig } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { spawn } from 'node:child_process'
@@ -144,7 +145,7 @@ function buildTail(
   const lower = claude.toLowerCase()
   const viaCmd = lower.endsWith('.cmd') || lower.endsWith('.bat')
   if (viaCmd && [...extra, ...(prompt ? [prompt] : [])].some((x) => CMD_SPECIAL.test(x))) {
-    console.log('[switcher] 參數含 cmd 特殊字元，已略過額外參數與提示，只用 --resume 接續。')
+    console.log(t('runner.cmdSpecial'))
     return ['--resume', resume]
   }
   return [...extra, '--resume', resume, ...(prompt ? [prompt] : [])]
@@ -162,7 +163,7 @@ function runClaude(argv: string[], cwd: string): { pid: number | undefined; done
 }
 
 async function pause(): Promise<void> {
-  console.log('按 Enter 結束…')
+  console.log(t('runner.pressEnter'))
   await new Promise<void>((resolve) => {
     try {
       process.stdin.once('data', () => resolve())
@@ -175,15 +176,25 @@ async function pause(): Promise<void> {
   })
 }
 
+/** 依 config.json 的 language 設定介面語言；沒有檔案或欄位時視同 auto。 */
+function initLanguage(): void {
+  try {
+    setLanguage(resolveLanguageFromConfig(storage.readJson(paths.configFile(), {})))
+  } catch {
+    setLanguage(resolveLanguage('auto'))
+  }
+}
+
 async function main(): Promise<number> {
+  initLanguage()
   const a = parseArgs(process.argv.slice(2))
   if (!a) {
-    console.log('[switcher] 參數錯誤：需要 --run-id 與 --cwd')
+    console.log(t('runner.badArgs'))
     return 2
   }
   const claude = a.claude || findClaude()
   if (!claude) {
-    console.log('[switcher] 找不到 claude，請確認已安裝並在 PATH 中。')
+    console.log(t('runner.claudeMissing'))
     if (!a.noPause) await pause()
     return 1
   }
@@ -196,7 +207,7 @@ async function main(): Promise<number> {
     writeState(a.runId, a.cwd, 'running', pid ?? null)
     const started = await done
     if (!started) {
-      console.log('[switcher] 無法啟動 claude。')
+      console.log(t('runner.startFailed'))
       writeState(a.runId, a.cwd, 'exited')
       return 1
     }
@@ -210,7 +221,7 @@ async function main(): Promise<number> {
         cmd = readCmd(a.runId)
       }
       if (cmd?.restart !== 'go') {
-        console.log('[switcher] 切換已中止或逾時，結束。')
+        console.log(t('runner.aborted'))
         writeState(a.runId, a.cwd, 'exited')
         return 0
       }
@@ -229,8 +240,8 @@ async function main(): Promise<number> {
     tail = buildTail(claude, extra, cmd.resume, cmd.prompt, true)
     console.log(
       cmd.resume
-        ? '[switcher] 已切換帳號，以 claude --resume 重新啟動…'
-        : '[switcher] 已切換帳號，以 claude --continue 重新啟動…'
+        ? t('runner.restartResume')
+        : t('runner.restartContinue')
     )
   }
 }
@@ -238,7 +249,7 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (e) => {
-    console.error('[switcher] 發生錯誤：', e instanceof Error ? e.message : e)
+    console.error(t('runner.error'), e instanceof Error ? e.message : e)
     process.exit(1)
   }
 )

@@ -1,4 +1,5 @@
 // 主程式端：啟動 runner、下重啟指令。不 import electron。
+import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -62,9 +63,9 @@ export function normalizeFolder(folder: string): string {
 /** 開新終端機執行 runner，回傳 run_id。資料夾含分號會丟錯。 */
 export function launch(folder: string, cont = false, opts: LaunchOptions = {}): string {
   const dir = normalizeFolder(String(folder))
-  if (dir.includes(';')) throw new Error('資料夾路徑不可含分號（;）')
+  if (dir.includes(';')) throw new Error(t('err.dirSemicolon'))
   const node = opts.node ?? findNode()
-  if (!node) throw new Error('找不到 Node.js')
+  if (!node) throw new Error(t('err.nodeNotFound'))
   const runId = randomBytes(4).toString('hex')
   const runner = path.join(opts.binDir ?? paths.binDir(), 'runner.cjs')
   const runnerCmd = [node, runner, '--run-id', runId, '--cwd', dir]
@@ -84,7 +85,7 @@ export function launch(folder: string, cont = false, opts: LaunchOptions = {}): 
   } else {
     // cmd.exe 後備路徑會把資料夾交給 cmd 解析，含 shell 特殊字元就拒絕，避免命令注入
     if (/[&^%|<>"]/.test(dir)) {
-      throw new Error('資料夾路徑含有 cmd 特殊字元（& ^ % | < > "），無法在沒有 Windows Terminal 時啟動')
+      throw new Error(t('err.dirCmdChars'))
     }
     child = sp(
       'cmd.exe',

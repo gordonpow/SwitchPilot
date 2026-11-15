@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { act } from '@/lib/use-app-state'
+import { useT } from '@/lib/i18n'
 
 export function LoginDialog({ login }: { login: LoginView }): React.JSX.Element {
   const open = login.state !== 'idle'
@@ -31,23 +32,24 @@ export function LoginDialog({ login }: { login: LoginView }): React.JSX.Element 
 }
 
 function Running({ login, onCancel }: { login: LoginView; onCancel: () => void }): React.JSX.Element {
+  const t = useT()
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{login.reloginSlotId ? '重新登入' : '瀏覽器登入'}</DialogTitle>
+        <DialogTitle>{login.reloginSlotId ? t('login.relogin') : t('login.browserLogin')}</DialogTitle>
         <DialogDescription className="text-pretty">
-          請在剛開啟的瀏覽器視窗完成登入。登入完成後，這裡會自動繼續。
+          {t('login.runningDesc')}
         </DialogDescription>
       </DialogHeader>
       <div className="flex items-center gap-3 rounded-md bg-muted/50 p-3 text-sm" role="status">
-        <Loader2 className="size-4 animate-spin" /> 等待登入中…
+        <Loader2 className="size-4 animate-spin" /> {t('login.waiting')}
       </div>
       <DialogFooter>
-        <Button variant="outline" onClick={() => void act(window.api.copyLoginUrl(), '已複製登入網址')}>
-          <Copy /> 複製登入網址
+        <Button variant="outline" onClick={() => void act(window.api.copyLoginUrl(), t('login.urlCopied'))}>
+          <Copy /> {t('login.copyUrl')}
         </Button>
         <Button variant="secondary" onClick={onCancel}>
-          取消
+          {t('common.cancel')}
         </Button>
       </DialogFooter>
     </>
@@ -55,12 +57,13 @@ function Running({ login, onCancel }: { login: LoginView; onCancel: () => void }
 }
 
 function AwaitingName({ login, onCancel }: { login: LoginView; onCancel: () => void }): React.JSX.Element {
+  const t = useT()
   const [name, setName] = useState(login.defaultName ?? login.email ?? '')
   const [busy, setBusy] = useState(false)
   const submit = async (): Promise<void> => {
     if (!name.trim()) return
     setBusy(true)
-    await act(window.api.completeLogin(name.trim()), '已儲存帳號')
+    await act(window.api.completeLogin(name.trim()), t('dialog.accountSaved'))
     setBusy(false)
   }
   return (
@@ -72,21 +75,21 @@ function AwaitingName({ login, onCancel }: { login: LoginView; onCancel: () => v
       }}
     >
       <DialogHeader>
-        <DialogTitle>登入成功</DialogTitle>
+        <DialogTitle>{t('login.successTitle')}</DialogTitle>
         <DialogDescription>
-          {login.email ? `已登入 ${login.email}，` : ''}請為這個帳號命名。
+          {login.email ? t('login.successDescWithEmail', { email: login.email }) : t('login.successDesc')}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-2">
-        <Label htmlFor="login-name">帳號名稱</Label>
+        <Label htmlFor="login-name">{t('dialog.accountName')}</Label>
         <Input id="login-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
-          取消
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={busy || !name.trim()}>
-          儲存
+          {t('common.save')}
         </Button>
       </DialogFooter>
     </form>
@@ -94,18 +97,19 @@ function AwaitingName({ login, onCancel }: { login: LoginView; onCancel: () => v
 }
 
 function Failed({ login, onClose }: { login: LoginView; onClose: () => void }): React.JSX.Element {
+  const t = useT()
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <TriangleAlert className="size-5 text-red-400" /> 登入失敗
+          <TriangleAlert className="size-5 text-red-400" /> {t('login.failedTitle')}
         </DialogTitle>
         <DialogDescription className="text-pretty" role="alert">
-          {login.message ?? '登入未完成，請再試一次。'}
+          {login.message ?? t('login.failedDefault')}
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
-        <Button onClick={onClose}>關閉</Button>
+        <Button onClick={onClose}>{t('common.close')}</Button>
       </DialogFooter>
     </>
   )

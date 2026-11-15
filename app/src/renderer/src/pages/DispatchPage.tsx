@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { formatDateTime } from '@/lib/format'
 import { ROLE_LABELS } from '@/lib/routing'
 import { useNow } from '@/lib/use-app-state'
+import { useT } from '@/lib/i18n'
+import type { MessageKey } from '../../../shared/i18n'
 
 const statusClass: Record<DispatchRecentView['status'], string> = {
   ok: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
@@ -12,27 +14,28 @@ const statusClass: Record<DispatchRecentView['status'], string> = {
   failed: 'border-red-500/40 bg-red-500/10 text-red-300'
 }
 
-const statusLabel: Record<DispatchRecentView['status'], string> = {
-  ok: '成功',
-  delegate: '委派 Claude',
-  failed: '失敗'
+const statusLabelKeys: Record<DispatchRecentView['status'], MessageKey> = {
+  ok: 'dispatch.status.ok',
+  delegate: 'dispatch.status.delegate',
+  failed: 'dispatch.status.failed'
 }
 
-function formatElapsed(startedAtMs: number, nowMs: number): string {
+function formatElapsed(startedAtMs: number, nowMs: number, t: (key: MessageKey, params?: Record<string, string | number>) => string): string {
   const diffSec = Math.max(0, Math.floor((nowMs - startedAtMs) / 1000))
-  if (diffSec < 60) return `${diffSec} 秒`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分 ${diffSec % 60} 秒`
-  return `${Math.floor(diffSec / 3600)} 時 ${Math.floor((diffSec % 3600) / 60)} 分`
+  if (diffSec < 60) return t('dispatch.durationSeconds', { s: diffSec })
+  if (diffSec < 3600) return t('dispatch.durationMinSec', { m: Math.floor(diffSec / 60), s: diffSec % 60 })
+  return t('dispatch.durationHourMin', { h: Math.floor(diffSec / 3600), m: Math.floor((diffSec % 3600) / 60) })
 }
 
-function formatDuration(startedAtMs: number, endedAtMs: number): string {
+function formatDuration(startedAtMs: number, endedAtMs: number, t: (key: MessageKey, params?: Record<string, string | number>) => string): string {
   const diffSec = Math.max(0, Math.floor((endedAtMs - startedAtMs) / 1000))
-  if (diffSec < 60) return `${diffSec} 秒`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分 ${diffSec % 60} 秒`
-  return `${Math.floor(diffSec / 3600)} 時 ${Math.floor((diffSec % 3600) / 60)} 分`
+  if (diffSec < 60) return t('dispatch.durationSeconds', { s: diffSec })
+  if (diffSec < 3600) return t('dispatch.durationMinSec', { m: Math.floor(diffSec / 60), s: diffSec % 60 })
+  return t('dispatch.durationHourMin', { h: Math.floor(diffSec / 3600), m: Math.floor((diffSec % 3600) / 60) })
 }
 
 export function DispatchPage({ state }: { state: AppState }): React.JSX.Element {
+  const t = useT()
   const now = useNow(1000)
   const running = state.dispatch?.running ?? []
   const recent = state.dispatch?.recent ?? []
@@ -40,29 +43,29 @@ export function DispatchPage({ state }: { state: AppState }): React.JSX.Element 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="派工"
-        description="檢視執行中的派工任務與最近的派工紀錄。"
+        title={t('dispatch.title')}
+        description={t('dispatch.description')}
       />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-base font-semibold">執行中 ({running.length})</CardTitle>
+          <CardTitle className="text-base font-semibold">{t('dispatch.runningTitle', { count: running.length })}</CardTitle>
         </CardHeader>
         <CardContent>
           {running.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">目前沒有執行中的派工</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('dispatch.emptyRunning')}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs [&_td]:pr-3 [&_th]:pr-3 [&_th]:whitespace-nowrap [&_td:last-child]:pr-0 [&_th:last-child]:pr-0">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="pb-2 font-medium">階段</th>
-                    <th className="pb-2 font-medium">供應商</th>
-                    <th className="pb-2 font-medium">模型</th>
-                    <th className="pb-2 font-medium">帳號</th>
-                    <th className="pb-2 font-medium">開始時間</th>
-                    <th className="pb-2 font-medium">已執行時間</th>
-                    <th className="pb-2 font-medium">資料夾</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thRole')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thProvider')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thModel')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thAccount')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thStartedAt')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thElapsed')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thFolder')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -76,7 +79,7 @@ export function DispatchPage({ state }: { state: AppState }): React.JSX.Element 
                         {formatDateTime(Math.floor(r.startedAt / 1000))}
                       </td>
                       <td className="py-2.5 tabular-nums text-muted-foreground">
-                        {formatElapsed(r.startedAt, now)}
+                        {formatElapsed(r.startedAt, now, t)}
                       </td>
                       <td className="max-w-xs truncate py-2.5 text-muted-foreground" title={r.cwd}>
                         {r.cwd}
@@ -92,23 +95,23 @@ export function DispatchPage({ state }: { state: AppState }): React.JSX.Element 
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-base font-semibold">最近紀錄 ({recent.length})</CardTitle>
+          <CardTitle className="text-base font-semibold">{t('dispatch.recentTitle', { count: recent.length })}</CardTitle>
         </CardHeader>
         <CardContent>
           {recent.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">尚無派工紀錄</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('dispatch.emptyRecent')}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs [&_td]:pr-3 [&_th]:pr-3 [&_th]:whitespace-nowrap [&_td:last-child]:pr-0 [&_th:last-child]:pr-0">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="pb-2 font-medium">階段</th>
-                    <th className="pb-2 font-medium">結果</th>
-                    <th className="pb-2 font-medium">供應商與模型</th>
-                    <th className="pb-2 font-medium">帳號</th>
-                    <th className="pb-2 font-medium">開始時間</th>
-                    <th className="pb-2 font-medium">耗時</th>
-                    <th className="pb-2 font-medium">訊息</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thRole')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thResult')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thProviderModel')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thAccount')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thStartedAt')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thDuration')}</th>
+                    <th className="pb-2 font-medium">{t('dispatch.thMessage')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -124,7 +127,7 @@ export function DispatchPage({ state }: { state: AppState }): React.JSX.Element 
                         <td className="py-2.5 font-medium">{ROLE_LABELS[rec.role] ?? rec.role}</td>
                         <td className="py-2.5">
                           <Badge variant="outline" className={statusClass[rec.status] ?? ''}>
-                            {statusLabel[rec.status] ?? rec.status}
+                            {t(statusLabelKeys[rec.status]) ?? rec.status}
                           </Badge>
                         </td>
                         <td className="py-2.5">{providerModel}</td>
@@ -133,7 +136,7 @@ export function DispatchPage({ state }: { state: AppState }): React.JSX.Element 
                           {formatDateTime(Math.floor(rec.startedAt / 1000))}
                         </td>
                         <td className="py-2.5 tabular-nums text-muted-foreground">
-                          {formatDuration(rec.startedAt, rec.endedAt)}
+                          {formatDuration(rec.startedAt, rec.endedAt, t)}
                         </td>
                         <td className="max-w-md truncate py-2.5 text-muted-foreground" title={rec.message}>
                           {rec.message}

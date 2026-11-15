@@ -3,6 +3,7 @@
 // 注意：這裡不取跨程序檔案鎖（core/filelock、paths.agyLockFile）。
 // switchAgy、saveCurrentAgy、syncCurrentAgyBack 的呼叫端（controller／switcher-run）必須先取得檔案鎖。
 // slot 檔含完整 OAuth blob，存於使用者設定目錄（繼承使用者 ACL）。
+import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -23,7 +24,7 @@ export interface AgySlot {
 /** agy 執行中，不可切換登入。 */
 export class AgyBusyError extends Error {
   constructor() {
-    super('agy 執行中，無法切換帳號')
+    super(t('err.agyRunning'))
     this.name = 'AgyBusyError'
   }
 }
@@ -85,9 +86,9 @@ export async function currentAgySlotId(ops: AgyCredOps): Promise<string | null> 
 /** 把目前登入存成新 slot；email 已存在則更新該 slot 的 user、blob、saved_at。 */
 export async function saveCurrentAgy(ops: AgyCredOps, name: string): Promise<AgySlot> {
   const cur = await ops.read()
-  if (!cur) throw new Error('目前沒有 agy 登入')
+  if (!cur) throw new Error(t('err.agyNoLogin'))
   const email = parseBlob(cur.blob).email
-  if (!email) throw new Error('無法讀取 agy 登入的 email')
+  if (!email) throw new Error(t('err.agyNoEmail'))
   const existing = findByEmail(email)
   const id = existing?.id ?? randomBytes(3).toString('hex')
   return withSlotLock(lockKey(id), () => {
@@ -131,7 +132,7 @@ export async function switchAgy(
   isAgyRunning: () => boolean | Promise<boolean>
 ): Promise<void> {
   const target = listAgySlots().find((s) => s.id === id)
-  if (!target) throw new Error('找不到 agy 帳號')
+  if (!target) throw new Error(t('err.agyNotFound'))
   await syncCurrentAgyBack(ops)
   if (await isAgyRunning()) throw new AgyBusyError()
   // sync back 之後重新讀取目標（目標即目前登入時可能剛被更新）
@@ -144,9 +145,9 @@ export async function switchAgy(
 export function renameAgy(id: string, name: string): Promise<void> {
   return withSlotLock(lockKey(id), () => {
     const slot = listAgySlots().find((s) => s.id === id)
-    if (!slot) throw new Error('找不到 agy 帳號')
+    if (!slot) throw new Error(t('err.agyNotFound'))
     const n = name.trim()
-    if (!n) throw new Error('名稱不可為空')
+    if (!n) throw new Error(t('err.nameEmpty'))
     storage.writeJsonAtomic(slotFile(id), { ...slot, name: n })
   })
 }
@@ -154,7 +155,7 @@ export function renameAgy(id: string, name: string): Promise<void> {
 /** 只刪 slot 檔，不動認證管理員（含使用中的帳號）。 */
 export function deleteAgy(id: string): Promise<void> {
   return withSlotLock(lockKey(id), () => {
-    if (!ID_RE.test(id)) throw new Error('找不到 agy 帳號')
+    if (!ID_RE.test(id)) throw new Error(t('err.agyNotFound'))
     fs.rmSync(slotFile(id), { force: true })
   })
 }

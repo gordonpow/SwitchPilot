@@ -1,4 +1,5 @@
 // agy 額度查詢（未公開介面）與快取。不 import electron。
+import { t } from '../shared/i18n'
 import * as path from 'node:path'
 import * as paths from './paths'
 import * as storage from './storage'
@@ -85,7 +86,7 @@ export async function fetchAgyQuota(
   } catch (e) {
     const error =
       e instanceof HttpError && (e.status === 401 || e.status === 403)
-        ? `agy 授權失效或已過期（HTTP ${e.status}）`
+        ? t('err.agyAuthExpired', { status: e.status })
         : errDetail(e, [accessToken])
     return { ts, tier: null, models: {}, error }
   }
@@ -114,6 +115,6 @@ export function readAgyQuota(slotId: string): AgyQuota | null {
 }
 
 export function writeAgyQuota(slotId: string, q: AgyQuota): void {
-  if (!SAFE_ID.test(slotId)) throw new Error('slot id 不合法')
+  if (!SAFE_ID.test(slotId)) throw new Error(t('err.slotIdInvalid'))
   storage.writeJsonAtomic(quotaFile(slotId), q)
 }

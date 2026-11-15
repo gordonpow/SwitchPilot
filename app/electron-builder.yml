@@ -16,7 +16,10 @@ files:
 extraResources:
   - from: resources/scripts
     to: scripts
+  - from: resources/icon.png
+    to: icon.png
 win:
+  icon: build/icon.ico
   target: portable
   executableName: claude-account-switcher
 npmRebuild: false

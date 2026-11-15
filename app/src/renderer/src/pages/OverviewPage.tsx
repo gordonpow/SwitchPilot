@@ -12,6 +12,7 @@ import { formatDateTime, formatReset, usageColor } from '@/lib/format'
 import type { Page } from '@/lib/pages'
 import { act } from '@/lib/use-app-state'
 import { cn } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 
 function MiniBar({
   label,
@@ -73,6 +74,7 @@ function RowShell({
   onClick: () => void
   children: React.ReactNode
 }): React.JSX.Element {
+  const t = useT()
   return (
     <li>
       <button
@@ -82,7 +84,7 @@ function RowShell({
       >
         <span className="flex w-44 min-w-0 shrink-0 items-center gap-1.5">
           <span className="truncate text-sm font-medium">{name}</span>
-          {active && <Badge className="text-[10px]">使用中</Badge>}
+          {active && <Badge className="text-[10px]">{t('accounts.active')}</Badge>}
           <Badge variant="secondary" className="text-[10px]">
             {tag}
           </Badge>
@@ -100,11 +102,12 @@ export function OverviewPage({
   state: AppState
   onNavigate: (p: Page) => void
 }): React.JSX.Element {
+  const t = useT()
   const th = state.config.threshold
   const toAccounts = (): void => onNavigate('accounts')
   return (
     <div className="space-y-4">
-      <PageHeader title="總覽" />
+      <PageHeader title={t('overview.title')} />
       {state.earliestReset && (
         <div
           role="alert"
@@ -112,16 +115,15 @@ export function OverviewPage({
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
           <span className="text-pretty">
-            所有帳號的額度都已用完，不會自動切換。最早重置時間：
-            <span className="font-medium tabular-nums"> {formatDateTime(state.earliestReset)}</span>
+            {t('overview.allExhausted', { time: formatDateTime(state.earliestReset) })}
           </span>
           <Button
             size="xs"
             variant="outline"
             className="ml-auto shrink-0"
-            onClick={() => void act(window.api.clearExhausted(), '已清除用完標記')}
+            onClick={() => void act(window.api.clearExhausted(), t('overview.exhaustedCleared'))}
           >
-            清除用完標記
+            {t('overview.clearExhausted')}
           </Button>
         </div>
       )}
@@ -129,15 +131,15 @@ export function OverviewPage({
         <div className="flex min-w-0 flex-col gap-4">
           <Card className="gap-3 py-4">
             <CardHeader className="px-4">
-              <CardTitle className="text-sm">帳號摘要</CardTitle>
+              <CardTitle className="text-sm">{t('overview.summaryTitle')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 px-2">
-              <section aria-label="Anthropic 摘要">
+              <section aria-label={t('overview.anthropicSummary')}>
                 <h3 className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
                   Anthropic · {state.accounts.length}
                 </h3>
                 {state.accounts.length === 0 ? (
-                  <p className="px-2 text-xs text-muted-foreground">尚無帳號</p>
+                  <p className="px-2 text-xs text-muted-foreground">{t('overview.noAccounts')}</p>
                 ) : (
                   <ul>
                     {state.accounts.map((a) => {
@@ -149,17 +151,17 @@ export function OverviewPage({
                         <RowShell key={a.id} name={a.name} active={a.active} tag="Claude" onClick={toAccounts}>
                           <div className={cn('flex flex-1 gap-3', a.usage.stale && 'opacity-50')}>
                             <MiniBar
-                              label="5 小時"
+                              label={t('usage.fiveHour')}
                               pct={fp}
                               color={usageColor(fp ?? 0, th)}
-                              text={fp === null ? '無資料' : `${fp}%`}
+                              text={fp === null ? t('usage.noData') : `${fp}%`}
                               reset={formatReset(f?.resets_at, Date.now())}
                             />
                             <MiniBar
-                              label="7 天"
+                              label={t('usage.sevenDay')}
                               pct={wp}
                               color={usageColor(wp ?? 0, th)}
-                              text={wp === null ? '無資料' : `${wp}%`}
+                              text={wp === null ? t('usage.noData') : `${wp}%`}
                               reset={formatReset(w?.resets_at, Date.now())}
                             />
                           </div>
@@ -169,12 +171,12 @@ export function OverviewPage({
                   </ul>
                 )}
               </section>
-              <section aria-label="Google 摘要">
+              <section aria-label={t('overview.googleSummary')}>
                 <h3 className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
                   Google · {state.agyAccounts.length}
                 </h3>
                 {state.agyAccounts.length === 0 ? (
-                  <p className="px-2 text-xs text-muted-foreground">尚無帳號</p>
+                  <p className="px-2 text-xs text-muted-foreground">{t('overview.noAccounts')}</p>
                 ) : (
                   <ul>
                     {state.agyAccounts.map((a) => {
@@ -183,10 +185,10 @@ export function OverviewPage({
                       return (
                         <RowShell key={a.id} name={a.name} active={a.active} tag="agy" onClick={toAccounts}>
                           <MiniBar
-                            label={m ? m.id : '額度'}
+                            label={m ? m.id : t('overview.quota')}
                             pct={pct}
                             color={remainingColor(pct ?? 0)}
-                            text={pct === null ? '無資料' : `剩 ${pct}%`}
+                            text={pct === null ? t('usage.noData') : t('agy.percentRemaining', { pct })}
                           />
                         </RowShell>
                       )

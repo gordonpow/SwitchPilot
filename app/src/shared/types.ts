@@ -40,6 +40,8 @@ export interface EventItem {
 
 export type LoginBrowser = 'chrome' | 'edge' | 'default'
 
+import type { Lang, LangSetting } from './i18n'
+
 export interface AppConfig {
   threshold: number
   auto_switch: boolean
@@ -52,6 +54,7 @@ export interface AppConfig {
   auto_compact: AutoCompactConfig
   close_to_tray: boolean // 按 X 時縮到系統匣
   launch_at_login: boolean // 開機自動啟動（以 --hidden 在背景啟動）
+  language: LangSetting // 介面語言；auto = 依系統語言
 }
 
 /** 自動整理上下文設定（與 core/config 的 AutoCompact 同形）。 */
@@ -161,6 +164,8 @@ export interface DispatchRecentView {
 }
 
 export interface AppState {
+  /** 實際使用的介面語言（auto 已解析） */
+  language: Lang
   accounts: AccountView[]
   current: { slotId: string | null; email: string | null; unsaved: boolean }
   runs: RunView[]

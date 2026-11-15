@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { act } from '@/lib/use-app-state'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   lastFolder: string
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function LaunchPanel({ lastFolder, runs }: Props): React.JSX.Element {
+  const t = useT()
   const [folder, setFolder] = useState(lastFolder)
   const [busy, setBusy] = useState(false)
 
@@ -21,30 +23,30 @@ export function LaunchPanel({ lastFolder, runs }: Props): React.JSX.Element {
   }
   const launch = async (cont: boolean): Promise<void> => {
     setBusy(true)
-    await act(window.api.launch(folder, cont), '已在 Windows Terminal 啟動 claude')
+    await act(window.api.launch(folder, cont), t('launch.started'))
     setBusy(false)
   }
 
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="px-4">
-        <CardTitle className="text-sm">啟動 claude</CardTitle>
+        <CardTitle className="text-sm">{t('launch.title')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 px-4">
         <div className="flex gap-2">
           <Input
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
-            placeholder="選擇專案資料夾"
-            aria-label="專案資料夾"
+            placeholder={t('launch.folderPlaceholder')}
+            aria-label={t('launch.folderLabel')}
           />
           <Button variant="outline" onClick={pick}>
-            <FolderOpen /> 瀏覽
+            <FolderOpen /> {t('launch.browse')}
           </Button>
         </div>
         <div className="flex gap-2">
           <Button className="flex-1" onClick={() => launch(false)} disabled={busy || !folder.trim()}>
-            <Play /> 啟動
+            <Play /> {t('launch.start')}
           </Button>
           <Button
             className="flex-1"
@@ -52,12 +54,17 @@ export function LaunchPanel({ lastFolder, runs }: Props): React.JSX.Element {
             onClick={() => launch(true)}
             disabled={busy || !folder.trim()}
           >
-            <RotateCcw /> 接續上次
+            <RotateCcw /> {t('launch.continue')}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground tabular-nums">
-          託管中視窗：{runs.length} 個
-          {runs.length > 0 && `（${runs.filter((r) => r.state === 'running').length} 執行中、${runs.filter((r) => r.state === 'waiting').length} 等待中）`}
+          {runs.length > 0
+            ? t('launch.managedWithDetails', {
+                count: runs.length,
+                running: runs.filter((r) => r.state === 'running').length,
+                waiting: runs.filter((r) => r.state === 'waiting').length
+              })
+            : t('launch.managedCount', { count: runs.length })}
         </p>
       </CardContent>
     </Card>

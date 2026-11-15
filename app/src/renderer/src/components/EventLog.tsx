@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatClock } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 
 const levelClass: Record<EventItem['level'], string> = {
   info: 'text-foreground',
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function EventLog({ events, limit, onViewAll, full }: Props): React.JSX.Element {
+  const t = useT()
   const shown = limit ? events.slice(-limit) : events
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -32,10 +34,10 @@ export function EventLog({ events, limit, onViewAll, full }: Props): React.JSX.E
     <Card className={cn('min-h-0 gap-3 py-4', full && 'h-full')}>
       {!full && (
         <CardHeader className="flex items-center justify-between px-4">
-          <CardTitle className="text-sm">{limit ? '最近事件' : '事件紀錄'}</CardTitle>
+          <CardTitle className="text-sm">{limit ? t('events.recentTitle') : t('events.title')}</CardTitle>
           {onViewAll && (
             <Button variant="link" size="xs" className="h-auto p-0" onClick={onViewAll}>
-              查看全部
+              {t('events.viewAll')}
             </Button>
           )}
         </CardHeader>
@@ -44,7 +46,7 @@ export function EventLog({ events, limit, onViewAll, full }: Props): React.JSX.E
         <div
           ref={ref}
           role="log"
-          aria-label="事件紀錄"
+          aria-label={t('events.title')}
           tabIndex={0}
           className={cn(
             'overflow-y-auto rounded-md bg-muted/40 p-2 font-mono text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
@@ -52,7 +54,7 @@ export function EventLog({ events, limit, onViewAll, full }: Props): React.JSX.E
           )}
         >
           {shown.length === 0 ? (
-            <p className="text-muted-foreground">尚無事件</p>
+            <p className="text-muted-foreground">{t('events.empty')}</p>
           ) : (
             shown.map((e, i) => (
               <div key={`${e.ts}-${i}`} className={cn('flex gap-2 py-0.5', levelClass[e.level])}>

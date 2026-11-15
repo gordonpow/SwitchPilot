@@ -213,7 +213,8 @@ describe('config', () => {
       switch_mode: 'live',
       auto_compact: config.AUTO_COMPACT_DEFAULTS,
       close_to_tray: false,
-      launch_at_login: false
+      launch_at_login: false,
+      language: 'auto'
     })
     config.save({ threshold: 80 })
     const cfg = config.load()

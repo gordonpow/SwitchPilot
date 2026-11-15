@@ -16,6 +16,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { Controller } from './controller'
 import { IPC, type AppState } from '../shared/types'
+import { getLanguage, setSystemLocales, t, type Lang } from '../shared/i18n'
 import { dialogToPage, shouldHaveTray, shouldHideOnClose, trayTooltip } from './trayPolicy'
 
 let controller: Controller | null = null
@@ -31,6 +32,7 @@ let trayTip = ''
 let closeToTray = false
 let hiddenByClose = false
 let hintShown = false
+let lastLang: Lang | null = null
 // 保留通知物件參考，避免被 GC 後點擊無效
 const liveNotices = new Set<Notification>()
 
@@ -67,9 +69,34 @@ function currentAccountName(state: AppState): string | null {
   return a ? a.name : state.current.email
 }
 
+function buildTrayMenu(): Menu {
+  return Menu.buildFromTemplate([
+    { label: t('tray.open'), click: showWindow },
+    { type: 'separator' },
+    {
+      label: t('tray.quit'),
+      click: () => {
+        quitting = true
+        app.quit()
+      }
+    }
+  ])
+}
+
 function syncTray(state?: AppState): void {
   if (state) {
     closeToTray = !!state.config.close_to_tray
+  }
+  // 語言改變：更新視窗標題與系統匣選單
+  const lang = getLanguage()
+  const langChanged = lastLang !== null && lastLang !== lang
+  lastLang = lang
+  if (langChanged) {
+    if (mainWin && !mainWin.isDestroyed()) mainWin.setTitle(t('app.title'))
+    if (tray) {
+      tray.setContextMenu(buildTrayMenu())
+      trayTip = ''
+    }
   }
   const want = shouldHaveTray({
     screenshot: screenshotMode,
@@ -86,24 +113,12 @@ function syncTray(state?: AppState): void {
     return
   }
   if (!tray) {
-    const img = nativeImage.createFromPath(icon).resize({ width: 32, height: 32 })
+    const img = appIcon().resize({ width: 32, height: 32 })
     tray = new Tray(img)
     trayTip = ''
     tray.on('click', showWindow)
     tray.on('double-click', showWindow)
-    tray.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: '開啟視窗', click: showWindow },
-        { type: 'separator' },
-        {
-          label: '結束',
-          click: () => {
-            quitting = true
-            app.quit()
-          }
-        }
-      ])
-    )
+    tray.setContextMenu(buildTrayMenu())
   }
   const st = state ?? controller?.getState()
   const tip = trayTooltip(st ? currentAccountName(st) : null)
@@ -124,6 +139,22 @@ function applyLoginItem(enabled: boolean): void {
   app.setLoginItemSettings({ openAtLogin: enabled, path: exe, args: ['--hidden'] })
 }
 
+/**
+ * 程式圖示。打包後改讀 asar 外的實體檔（extraResources），
+ * 避免 nativeImage 讀 asar 內路徑失敗而顯示空白圖示。
+ */
+let iconCache: Electron.NativeImage | null = null
+function appIcon(): Electron.NativeImage {
+  if (iconCache) return iconCache
+  const candidates = app.isPackaged ? [join(process.resourcesPath, 'icon.png'), icon] : [icon]
+  for (const p of candidates) {
+    const img = nativeImage.createFromPath(p)
+    if (!img.isEmpty()) return (iconCache = img)
+  }
+  console.error('找不到程式圖示')
+  return (iconCache = nativeImage.createEmpty())
+}
+
 function scriptsDir(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'scripts')
@@ -131,6 +162,7 @@ function scriptsDir(): string {
 }
 
 function setupController(): Controller {
+  setSystemLocales(app.getPreferredSystemLanguages())
   const c = new Controller({
     scriptsDir: scriptsDir(),
     // Chromium 網路堆疊：使用 Windows 憑證存放區與系統 proxy（Node fetch 不信任攔截用根憑證）
@@ -192,11 +224,11 @@ function createWindow(): void {
     height: 800,
     minWidth: 900,
     minHeight: 640,
-    title: 'Claude 帳號切換器',
+    title: t('app.title'),
     backgroundColor: '#0a0a0a',
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon: appIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -228,7 +260,7 @@ function createWindow(): void {
     syncTray()
     if (!hintShown) {
       hintShown = true
-      showNotice('Claude 帳號切換器', '仍在背景執行，可從系統匣開啟')
+      showNotice(t('app.title'), t('app.backgroundHint'))
     }
   })
 

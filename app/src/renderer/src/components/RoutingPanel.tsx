@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CLAUDE_MODELS, MAX_ENTRIES, ROLE_IDS, ROLE_LABELS, entryLabel } from '@/lib/routing'
 import { act } from '@/lib/use-app-state'
 import { cn } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   state: AppState
@@ -27,13 +28,16 @@ function AccountPicker({
   value: string[]
   onChange: (v: string[]) => void
 }): React.JSX.Element {
+  const t = useT()
   if (accounts.length === 0) {
-    return <p className="text-xs text-muted-foreground">帳號範圍：全部（尚無 agy 帳號）</p>
+    return <p className="text-xs text-muted-foreground">{t('routing.scopeAllNoAccounts')}</p>
   }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <span className="text-muted-foreground">
-        帳號範圍：{value.length === 0 ? '全部' : `${value.length} 個`}
+        {value.length === 0
+          ? t('routing.scope', { count: t('common.all') })
+          : t('routing.scopeCount', { count: value.length })}
       </span>
       {accounts.map((a) => (
         <label key={a.id} className="flex cursor-pointer items-center gap-1.5">
@@ -61,6 +65,7 @@ interface AddForm {
 }
 
 export function RoutingPanel({ state }: Props): React.JSX.Element {
+  const t = useT()
   const [draft, setDraft] = useState<Routing>(() => clone(state.routing))
   const [adding, setAdding] = useState<RoleId | null>(null)
   const [form, setForm] = useState<AddForm>({ provider: 'claude', model: 'sonnet', accounts: [] })
@@ -106,12 +111,12 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
     try {
       const r = await window.api.setRouting(draft)
       if (r.ok) {
-        await act(Promise.resolve(r), '已儲存模型分工')
+        await act(Promise.resolve(r), t('routing.saved'))
       } else {
         setError(r.error)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '發生未知錯誤')
+      setError(e instanceof Error ? e.message : t('common.unknownErrorLong'))
     }
     setSaving(false)
   }
@@ -119,23 +124,23 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
   return (
     <div className="max-w-3xl">
       <PageHeader
-        title="模型分工"
-        description="每個階段依序嘗試清單中的項目，前一項額度用完或無法使用時換下一項。Claude 項目一定使用目前的 Claude 帳號。"
+        title={t('routing.title')}
+        description={t('routing.description')}
       />
 
       <div className="mb-4 rounded-md border p-3">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="max-concurrent" className="text-sm font-medium">
-              每個 agy 帳號同時執行上限
+              {t('routing.maxConcurrent')}
             </Label>
             <p className="text-xs text-muted-foreground">
-              多個派工同時執行時，最多同時在此數量的任務中使用同一個 agy 帳號（1～8）。
+              {t('routing.maxConcurrentDesc')}
             </p>
           </div>
           <Input
             id="max-concurrent"
-            aria-label="每個 agy 帳號同時執行上限"
+            aria-label={t('routing.maxConcurrent')}
             type="number"
             min={1}
             max={8}
@@ -153,7 +158,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
         </div>
       </div>
 
-      <ul className="space-y-3" aria-label="模型分工清單">
+      <ul className="space-y-3" aria-label={t('routing.listAria')}>
           {ROLE_IDS.map((role) => {
             const list = draft.roles[role]
             return (
@@ -166,7 +171,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                     disabled={list.length >= MAX_ENTRIES || adding === role}
                     onClick={() => startAdd(role)}
                   >
-                    <Plus /> 新增
+                    <Plus /> {t('common.add')}
                   </Button>
                 </div>
 
@@ -193,7 +198,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label="上移"
+                            aria-label={t('routing.moveUp')}
                             disabled={i === 0}
                             onClick={() => move(role, i, -1)}
                           >
@@ -202,7 +207,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label="下移"
+                            aria-label={t('routing.moveDown')}
                             disabled={i === list.length - 1}
                             onClick={() => move(role, i, 1)}
                           >
@@ -211,7 +216,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label="刪除"
+                            aria-label={t('common.delete')}
                             disabled={list.length <= 1}
                             onClick={() =>
                               setList(
@@ -233,7 +238,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                               setList(
                                 role,
                                 list.map((x, k) =>
-                                  k === i
+                                   k === i
                                     ? v.length > 0
                                       ? { ...x, accounts: v }
                                       : { provider: x.provider, model: x.model }
@@ -245,7 +250,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                         </div>
                       ) : (
                         <p className="pl-6 text-xs text-muted-foreground">
-                          帳號範圍：目前帳號（指定帳號為「第二期」功能）
+                          {t('routing.claudeScopeNotice')}
                         </p>
                       )}
                     </li>
@@ -256,7 +261,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                   <div className="space-y-2 rounded-md border border-dashed p-2">
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1">
-                        <Label className="text-xs">供應商</Label>
+                        <Label className="text-xs">{t('routing.provider')}</Label>
                         <Select
                           value={form.provider}
                           onValueChange={(v) =>
@@ -267,7 +272,7 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                             })
                           }
                         >
-                          <SelectTrigger className="w-32" aria-label="供應商">
+                          <SelectTrigger className="w-32" aria-label={t('routing.provider')}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -277,10 +282,10 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                         </Select>
                       </div>
                       <div className="min-w-0 flex-1 space-y-1">
-                        <Label className="text-xs">模型</Label>
+                        <Label className="text-xs">{t('routing.model')}</Label>
                         {form.provider === 'claude' ? (
                           <Select value={form.model} onValueChange={(v) => setForm({ ...form, model: v })}>
-                            <SelectTrigger className="w-full" aria-label="模型">
+                            <SelectTrigger className="w-full" aria-label={t('routing.model')}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -294,10 +299,10 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                         ) : (
                           <>
                             <Input
-                              aria-label="agy 模型"
+                              aria-label={t('routing.agyModel')}
                               list="agy-model-options"
                               value={form.model}
-                              placeholder="例如 claude-sonnet-4-6"
+                              placeholder={t('routing.modelPlaceholder')}
                               onChange={(e) => setForm({ ...form, model: e.target.value })}
                             />
                             <datalist id="agy-model-options">
@@ -318,10 +323,10 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
                     )}
                     <div className="flex justify-end gap-2">
                       <Button size="xs" variant="outline" onClick={() => setAdding(null)}>
-                        取消
+                        {t('common.cancel')}
                       </Button>
                       <Button size="xs" disabled={!form.model.trim()} onClick={() => confirmAdd(role)}>
-                        加入
+                        {t('routing.addEntry')}
                       </Button>
                     </div>
                   </div>
@@ -347,10 +352,10 @@ export function RoutingPanel({ state }: Props): React.JSX.Element {
               setError(null)
             }}
           >
-            還原
+            {t('common.revert')}
           </Button>
           <Button disabled={!dirty || saving} onClick={() => void save()}>
-            儲存
+            {t('common.save')}
           </Button>
         </div>
     </div>

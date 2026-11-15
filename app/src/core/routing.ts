@@ -1,4 +1,5 @@
 // 模型分工（routing.json）：每個階段一份有順序的備援清單。不 import electron。
+import { t } from '../shared/i18n'
 import * as paths from './paths'
 import * as storage from './storage'
 
@@ -21,14 +22,29 @@ export const ROLE_IDS: readonly RoleId[] = [
   'docs'
 ]
 
+// 以 getter 在讀取時才查目前語言，語言切換後標籤跟著變。
 export const ROLE_LABELS: Record<RoleId, string> = {
-  requirements: '需求定義',
-  spec: '規格',
-  spec_review: '規格審查',
-  implement: '實作',
-  impl_review: '實作審查／驗證',
-  research: '查資料',
-  docs: '文件草稿'
+  get requirements() {
+    return t('role.requirements')
+  },
+  get spec() {
+    return t('role.spec')
+  },
+  get spec_review() {
+    return t('role.spec_review')
+  },
+  get implement() {
+    return t('role.implement')
+  },
+  get impl_review() {
+    return t('role.impl_review')
+  },
+  get research() {
+    return t('role.research')
+  },
+  get docs() {
+    return t('role.docs')
+  }
 }
 
 export type ClaudeModel = 'opus' | 'sonnet' | 'haiku'
@@ -116,24 +132,24 @@ function cloneDefault(): Routing {
 
 /** 驗證單一項目；回傳錯誤訊息或 null。 */
 function entryError(e: unknown): string | null {
-  if (!e || typeof e !== 'object') return '項目格式不正確'
+  if (!e || typeof e !== 'object') return t('route.badItem')
   const r = e as Record<string, unknown>
-  if (r.provider !== 'claude' && r.provider !== 'agy') return '供應商只能是 claude 或 agy'
-  if (typeof r.model !== 'string' || !r.model) return '模型不可為空'
+  if (r.provider !== 'claude' && r.provider !== 'agy') return t('route.providerOnly')
+  if (typeof r.model !== 'string' || !r.model) return t('route.modelEmpty')
   if (r.provider === 'claude' && !CLAUDE_MODELS.has(r.model))
-    return 'Claude 模型只能是 opus、sonnet 或 haiku'
-  if (r.provider === 'agy' && !AGY_MODEL_RE.test(r.model)) return `agy 模型名稱不合法：${r.model}`
+    return t('route.claudeModel')
+  if (r.provider === 'agy' && !AGY_MODEL_RE.test(r.model)) return t('route.agyModel', { model: r.model })
   if (r.accounts !== undefined) {
     if (!Array.isArray(r.accounts) || !r.accounts.every((a) => typeof a === 'string' && a))
-      return '帳號範圍必須是字串清單'
+      return t('route.scopeList')
   }
   return null
 }
 
 function entriesError(list: unknown): string | null {
-  if (!Array.isArray(list)) return '必須是清單'
-  if (list.length < 1) return '至少需要一項'
-  if (list.length > MAX_ENTRIES) return `最多 ${MAX_ENTRIES} 項`
+  if (!Array.isArray(list)) return t('route.mustBeList')
+  if (list.length < 1) return t('route.atLeastOne')
+  if (list.length > MAX_ENTRIES) return t('route.atMost', { max: MAX_ENTRIES })
   for (const e of list) {
     const m = entryError(e)
     if (m) return m
@@ -149,7 +165,7 @@ function normalizeEntry(e: RouteEntry): RouteEntry {
 
 /** 驗證整份設定；不合法丟 RoutingError（繁中訊息）。 */
 export function validateRouting(r: unknown): asserts r is Routing {
-  if (!r || typeof r !== 'object') throw new RoutingError('模型分工設定格式不正確')
+  if (!r || typeof r !== 'object') throw new RoutingError(t('route.badFormat'))
   const obj = r as Record<string, unknown>
   if (obj.max_concurrent_per_account !== undefined) {
     const n = obj.max_concurrent_per_account
@@ -159,14 +175,14 @@ export function validateRouting(r: unknown): asserts r is Routing {
       n < MIN_MAX_CONCURRENT ||
       n > MAX_MAX_CONCURRENT
     ) {
-      throw new RoutingError('每個帳號同時執行上限必須是 1 到 8 的整數')
+      throw new RoutingError(t('route.limitRange'))
     }
   }
   const roles = obj.roles
-  if (!roles || typeof roles !== 'object') throw new RoutingError('模型分工設定缺少 roles')
+  if (!roles || typeof roles !== 'object') throw new RoutingError(t('route.missingRoles'))
   for (const id of ROLE_IDS) {
     const m = entriesError((roles as Record<string, unknown>)[id])
-    if (m) throw new RoutingError(`「${ROLE_LABELS[id]}」${m}`)
+    if (m) throw new RoutingError(t('route.roleError', { role: ROLE_LABELS[id], msg: m }))
   }
 }
 

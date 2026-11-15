@@ -1,4 +1,5 @@
 // 由 Claude Code 執行的 statusline 腳本：記錄用量並輸出一行狀態。絕不丟例外。
+import { resolveLanguage, setLanguage, t, resolveLanguageFromConfig } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as paths from '../core/paths'
@@ -112,7 +113,17 @@ function readStdin(): string {
   }
 }
 
+/** 依 config.json 的 language 設定介面語言；沒有檔案或欄位時視同 auto。 */
+function initLanguage(): void {
+  try {
+    setLanguage(resolveLanguageFromConfig(storage.readJson(paths.configFile(), {})))
+  } catch {
+    setLanguage(resolveLanguage('auto'))
+  }
+}
+
 function main(): void {
+  initLanguage()
   const raw = readStdin()
   let data: Record<string, unknown> = {}
   if (raw.trim()) {
@@ -123,7 +134,7 @@ function main(): void {
   }
 
   let slotId: string | null = null
-  let name = '未儲存'
+  let name = t('tray.unsaved')
   try {
     slotId = accounts.currentSlotId()
     if (slotId) {

@@ -12,6 +12,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { Page } from '@/lib/pages'
 import { cn } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
+import type { MessageKey } from '../../../shared/i18n'
 
 interface Props {
   page: Page
@@ -21,13 +23,13 @@ interface Props {
   dispatchCount?: number
 }
 
-const settingsItems: { page: Page; label: string }[] = [
-  { page: 'settings/general', label: '一般' },
-  { page: 'settings/switch', label: '帳號切換' },
-  { page: 'settings/cli', label: 'Claude CLI' },
-  { page: 'settings/compact', label: '自動整理上下文' },
-  { page: 'settings/routing', label: '模型分工' },
-  { page: 'settings/integration', label: 'Claude Code 整合' }
+const settingsItems: { page: Page; labelKey: MessageKey }[] = [
+  { page: 'settings/general', labelKey: 'nav.settings.general' },
+  { page: 'settings/switch', labelKey: 'nav.settings.switch' },
+  { page: 'settings/cli', labelKey: 'nav.settings.cli' },
+  { page: 'settings/compact', labelKey: 'nav.settings.compact' },
+  { page: 'settings/routing', labelKey: 'nav.settings.routing' },
+  { page: 'settings/integration', labelKey: 'nav.settings.integration' }
 ]
 
 const itemBase =
@@ -82,41 +84,42 @@ function Item({
 }
 
 export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchCount }: Props): React.JSX.Element {
+  const t = useT()
   const inSettings = page.startsWith('settings/')
   const [open, setOpen] = useState(inSettings)
   const showSub = open || inSettings
   return (
     <nav
-      aria-label="主選單"
+      aria-label={t('nav.mainMenu')}
       className="flex w-52 shrink-0 flex-col gap-1 overflow-y-auto border-r p-2 max-[1099px]:w-14"
     >
-      <Item icon={LayoutDashboard} label="總覽" active={page === 'overview'} onClick={() => onNavigate('overview')} />
+      <Item icon={LayoutDashboard} label={t('nav.overview')} active={page === 'overview'} onClick={() => onNavigate('overview')} />
       <Item
         icon={Users}
-        label="帳號"
+        label={t('nav.accounts')}
         count={accountCount}
         active={page === 'accounts'}
         onClick={() => onNavigate('accounts')}
       />
       <Item
         icon={Terminal}
-        label="Claude CLI"
+        label={t('nav.cli')}
         count={cliCount}
         active={page === 'cli'}
         onClick={() => onNavigate('cli')}
       />
       <Item
         icon={Workflow}
-        label="派工"
+        label={t('nav.dispatch')}
         count={dispatchCount}
         active={page === 'dispatch'}
         onClick={() => onNavigate('dispatch')}
       />
-      <Item icon={ScrollText} label="事件紀錄" active={page === 'events'} onClick={() => onNavigate('events')} />
+      <Item icon={ScrollText} label={t('nav.events')} active={page === 'events'} onClick={() => onNavigate('events')} />
       <div role="separator" className="my-1 border-t" />
       <Item
         icon={Settings}
-        label="設定"
+        label={t('nav.settings')}
         active={false}
         expanded={showSub}
         onClick={() => {
@@ -135,7 +138,7 @@ export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchC
       {showSub && (
         <div className="flex flex-col gap-0.5 pl-3 max-[1099px]:pl-0">
           {settingsItems.map((s, i) => (
-            <SubItem key={s.page} short={String(i + 1)} label={s.label} active={page === s.page} onClick={() => onNavigate(s.page)} />
+            <SubItem key={s.page} short={String(i + 1)} label={t(s.labelKey)} active={page === s.page} onClick={() => onNavigate(s.page)} />
           ))}
         </div>
       )}

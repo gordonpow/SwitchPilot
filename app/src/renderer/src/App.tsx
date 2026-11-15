@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AccountView } from '../../shared/types'
+import { setLanguage } from '../../shared/i18n'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -26,10 +27,12 @@ import { OverviewPage } from '@/pages/OverviewPage'
 import { SettingsRouter } from '@/pages/SettingsRouter'
 import { initialPage, savePage, type Page } from '@/lib/pages'
 import { act, useAppState, useNow } from '@/lib/use-app-state'
+import { LangContext, useT } from '@/lib/i18n'
 
 function App(): React.JSX.Element {
   const state = useAppState()
   const now = useNow()
+  const t = useT()
   const [page, setPageState] = useState<Page>(initialPage)
   const setPage = (p: Page): void => {
     setPageState(p)
@@ -41,16 +44,23 @@ function App(): React.JSX.Element {
   const [switchTarget, setSwitchTarget] = useState<AccountView | null>(null)
   const [savingCurrent, setSavingCurrent] = useState(false)
 
+  const lang = state?.language
+  // 先於子元件渲染就設好語言，讓同一輪的 t() 取得新語言
+  if (lang) setLanguage(lang)
+  useEffect(() => {
+    if (lang) document.documentElement.lang = lang === 'zh-TW' ? 'zh-Hant-TW' : 'en'
+  }, [lang])
+
   if (!state) {
     return (
       <div className="flex h-dvh items-center justify-center text-sm text-muted-foreground" role="status">
-        載入中…
+        {t('app.loading')}
       </div>
     )
   }
 
   const doSwitch = async (a: AccountView, restart: boolean): Promise<void> => {
-    await act(window.api.switchTo(a.id, restart), `已切換到「${a.name}」`)
+    await act(window.api.switchTo(a.id, restart), t('app.switchedTo', { name: a.name }))
   }
   const requestSwitch = (a: AccountView): void => {
     // 只有 restart 模式才需要問是否重啟託管視窗；live 模式一律不重啟
@@ -59,6 +69,7 @@ function App(): React.JSX.Element {
   }
 
   return (
+    <LangContext.Provider value={state.language}>
     <TooltipProvider delayDuration={200}>
       <div className="flex h-dvh flex-col">
         <TopBar state={state} now={now} onRefresh={() => void act(window.api.refreshUsage())} />
@@ -97,40 +108,40 @@ function App(): React.JSX.Element {
 
       <NameDialog
         open={renaming !== null}
-        title="重新命名"
+        title={t('dialog.renameTitle')}
         initialName={renaming?.name ?? ''}
-        submitLabel="儲存"
+        submitLabel={t('common.save')}
         onClose={() => setRenaming(null)}
         onSubmit={async (name) => {
-          if (renaming && (await act(window.api.renameSlot(renaming.id, name), '已重新命名'))) setRenaming(null)
+          if (renaming && (await act(window.api.renameSlot(renaming.id, name), t('dialog.renamed')))) setRenaming(null)
         }}
       />
       <NameDialog
         open={savingCurrent}
-        title="儲存目前登入的帳號"
-        description={state.current.email ? `目前登入：${state.current.email}` : undefined}
+        title={t('dialog.saveCurrentTitle')}
+        description={state.current.email ? t('dialog.currentLogin', { email: state.current.email }) : undefined}
         initialName={state.current.email ?? ''}
-        submitLabel="儲存"
+        submitLabel={t('common.save')}
         onClose={() => setSavingCurrent(false)}
         onSubmit={async (name) => {
-          if (await act(window.api.saveCurrent(name), '已儲存帳號')) setSavingCurrent(false)
+          if (await act(window.api.saveCurrent(name), t('dialog.accountSaved'))) setSavingCurrent(false)
         }}
       />
 
       <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>刪除帳號「{deleting?.name}」？</AlertDialogTitle>
+            <AlertDialogTitle>{t('dialog.deleteConfirmTitle', { name: deleting?.name ?? '' })}</AlertDialogTitle>
             <AlertDialogDescription>
-              會移除這個帳號儲存的登入資料，無法復原。需要時必須重新登入。
+              {t('dialog.deleteConfirmDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleting && void act(window.api.deleteSlot(deleting.id), '已刪除帳號')}
+              onClick={() => deleting && void act(window.api.deleteSlot(deleting.id), t('dialog.accountDeleted'))}
             >
-              刪除
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -139,14 +150,13 @@ function App(): React.JSX.Element {
       <AlertDialog open={switchTarget !== null} onOpenChange={(o) => !o && setSwitchTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>切換到「{switchTarget?.name}」</AlertDialogTitle>
+            <AlertDialogTitle>{t('dialog.switchConfirmTitle', { name: switchTarget?.name ?? '' })}</AlertDialogTitle>
             <AlertDialogDescription className="text-pretty">
-              目前有 {state.runs.length} 個託管中的 claude 視窗。是否一併重啟，讓它們改用新帳號？
-              不重啟的話，執行中的視窗會繼續使用舊帳號。
+              {t('dialog.switchConfirmDesc', { count: state.runs.length })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <Button
               variant="outline"
               onClick={() => {
@@ -154,14 +164,14 @@ function App(): React.JSX.Element {
                 setSwitchTarget(null)
               }}
             >
-              只切換，不重啟
+              {t('dialog.switchOnly')}
             </Button>
             <AlertDialogAction
               onClick={() => {
                 if (switchTarget) void doSwitch(switchTarget, true)
               }}
             >
-              切換並重啟
+              {t('dialog.switchAndRestart')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -169,6 +179,7 @@ function App(): React.JSX.Element {
 
       <Toaster theme="dark" />
     </TooltipProvider>
+    </LangContext.Provider>
   )
 }
 

@@ -12,6 +12,7 @@ import {
   type LauncherLike,
   type LoginSessionLike
 } from '../src/main/controller'
+import { setLanguage } from '../src/shared/i18n'
 import type { AppState } from '../src/shared/types'
 import { acct, creds, login, useTempEnv } from './helpers'
 
@@ -193,6 +194,22 @@ describe('Controller', () => {
     expect(s.pending).toBe(false)
     expect(s.events.some((e) => e.text.includes('切換：A → C'))).toBe(true)
     expect(ctl.monitor.since).toBeGreaterThanOrEqual(t)
+  })
+
+  it('語言為 en 時，事件紀錄與錯誤為英文（結束還原 zh-TW）', async () => {
+    login('tok-x', 'uuid-x', 'x@x')
+    const ctl = make()
+    setLanguage('en')
+    try {
+      const ok = await ctl.saveCurrent('Main')
+      expect(ok.ok).toBe(true)
+      expect(ctl.getState().events.some((e) => e.text === 'Saved account: Main (x@x)')).toBe(true)
+      const bad = await ctl.saveCurrent('  ')
+      expect(bad.ok).toBe(false)
+      expect(bad.ok === false && bad.error).toBe('Name cannot be empty')
+    } finally {
+      setLanguage('zh-TW')
+    }
   })
 
   it('等待 claude 逾時：abort，不切換、不 release', async () => {

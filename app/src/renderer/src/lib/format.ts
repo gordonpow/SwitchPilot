@@ -1,3 +1,5 @@
+import { t } from '../../../shared/i18n'
+
 const pad = (n: number): string => String(n).padStart(2, '0')
 
 /** unix 秒 → `MM/DD HH:mm`（本地時間）。 */
@@ -12,7 +14,9 @@ export function formatReset(resetsAt: number | null | undefined, nowMs: number):
   const d = new Date(resetsAt * 1000)
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
   const within = resetsAt * 1000 - nowMs < 86400_000
-  return within ? `${hm} 重置` : `${formatDateTime(resetsAt)} 重置`
+  return within
+    ? t('format.resetsAt', { time: hm })
+    : t('format.resetsAt', { time: formatDateTime(resetsAt) })
 }
 
 /** unix 秒 → `HH:mm:ss`（本地時間）。 */
@@ -24,11 +28,11 @@ export function formatClock(unixSec: number): string {
 /** unix 秒 → 「2 分鐘前」。 */
 export function formatRelative(unixSec: number, nowMs: number): string {
   const diff = Math.max(0, Math.floor(nowMs / 1000 - unixSec))
-  if (diff < 10) return '剛剛'
-  if (diff < 60) return `${diff} 秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分鐘前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`
-  return `${Math.floor(diff / 86400)} 天前`
+  if (diff < 10) return t('format.justNow')
+  if (diff < 60) return t('format.secondsAgo', { count: diff })
+  if (diff < 3600) return t('format.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('format.hoursAgo', { count: Math.floor(diff / 3600) })
+  return t('format.daysAgo', { count: Math.floor(diff / 86400) })
 }
 
 /** 用量百分比對應的進度條顏色 class。 */

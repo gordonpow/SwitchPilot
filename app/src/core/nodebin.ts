@@ -1,4 +1,5 @@
 // 尋找系統 node 與安裝 scripts（*.cjs、*.ps1）到 binDir。不 import electron。
+import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -70,7 +71,7 @@ export function installScripts(
   try {
     names = fs.readdirSync(src).filter((n) => n.endsWith('.cjs') || n.endsWith('.ps1'))
   } catch {
-    throw new Error(`找不到 scripts 來源目錄：${src}`)
+    throw new Error(t('err.scriptsSrcMissing', { src }))
   }
   fs.mkdirSync(dst, { recursive: true })
   const result: InstallScriptsResult = { copied: [], unchanged: [] }

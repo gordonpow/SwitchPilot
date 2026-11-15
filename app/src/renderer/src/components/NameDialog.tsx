@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -31,6 +32,7 @@ export function NameDialog({ open, ...rest }: Props): React.JSX.Element {
 }
 
 function Body({ title, description, initialName, submitLabel, onSubmit, onClose }: Omit<Props, 'open'>): React.JSX.Element {
+  const t = useT()
   const [name, setName] = useState(initialName)
   const [busy, setBusy] = useState(false)
   const submit = async (): Promise<void> => {
@@ -52,12 +54,12 @@ function Body({ title, description, initialName, submitLabel, onSubmit, onClose 
         {description && <DialogDescription>{description}</DialogDescription>}
       </DialogHeader>
       <div className="space-y-2">
-        <Label htmlFor="name-input">帳號名稱</Label>
+        <Label htmlFor="name-input">{t('dialog.accountName')}</Label>
         <Input id="name-input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
-          取消
+          {t('common.cancel')}
         </Button>
         <Button type="submit" disabled={busy || !name.trim()}>
           {submitLabel}

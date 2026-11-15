@@ -1,4 +1,5 @@
 // 自動切換判斷（純邏輯，不讀檔）。移植自 Python monitor.py。
+import { t } from '../shared/i18n'
 
 export type Window = { used_percentage: number; resets_at: number } | null
 
@@ -108,7 +109,7 @@ export class Monitor {
       )) {
       const until = maxReset(over) || now + 5 * 3600
       this.pending = false
-      return act('switch_now', '收到 rate_limit 錯誤', until)
+      return act('switch_now', t('monitor.rateLimit'), until)
     }
 
     // 規則 2：用量達門檻，進入或維持 pending
@@ -122,7 +123,7 @@ export class Monitor {
       // 規則 3：用量降回門檻以下，取消 pending
       this.pending = false
       this.exhaustedUntil = 0
-      return act('none', '用量已降回門檻以下')
+      return act('none', t('monitor.belowThreshold'))
     }
 
     if (!this.pending) return act('none')
@@ -130,18 +131,18 @@ export class Monitor {
     const until = this.exhaustedUntil || now + 5 * 3600
     if (!this.waitTurnEnd) {
       this.pending = false
-      return act('switch_now', '已達門檻', until)
+      return act('switch_now', t('monitor.thresholdReached'), until)
     }
     // 規則 4：pending 中回合結束（含同一 tick 才進 pending）
     if (evs.some((e) => e.kind === 'stop' || e.kind === 'stopfailure')) {
       this.pending = false
-      return act('switch_now', '已達門檻，回合已結束', until)
+      return act('switch_now', t('monitor.thresholdTurnEnded'), until)
     }
     // 規則 5：pending 逾時
     if (now - this.pendingSince > this.pendingTimeout) {
       this.pending = false
-      return act('switch_now', '已達門檻，等待回合結束逾時', until)
+      return act('switch_now', t('monitor.thresholdTimeout'), until)
     }
-    return act('pending', '已達門檻，等待回合結束後切換', until)
+    return act('pending', t('monitor.thresholdWaiting'), until)
   }
 }

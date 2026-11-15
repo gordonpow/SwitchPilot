@@ -1,4 +1,5 @@
 // 以瀏覽器登入新增帳號：在暫存的 CLAUDE_CONFIG_DIR 下執行 `claude auth login`。不 import electron。
+import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -66,10 +67,10 @@ export class LoginSession {
     let cmd = this.opts.claudeCmd
     if (!cmd) {
       cmd = findClaude() ?? undefined
-      if (!cmd) throw new LoginError('找不到 claude 指令')
+      if (!cmd) throw new LoginError(t('err.claudeCmdNotFound'))
     }
     const node = this.opts.node ?? findNode()
-    if (!node) throw new LoginError('找不到 Node.js')
+    if (!node) throw new LoginError(t('err.nodeNotFound'))
     const binDir = this.opts.binDir ?? paths.binDir()
     const d = path.join(paths.loginDir(), randomBytes(4).toString('hex'))
     fs.mkdirSync(d, { recursive: true })
@@ -105,7 +106,7 @@ export class LoginSession {
     } catch (e) {
       this.cleanup()
       if (e instanceof LoginError) throw e
-      throw new LoginError(`無法啟動登入程序：${(e as Error).message}`)
+      throw new LoginError(t('err.loginStartFailed', { error: (e as Error).message }))
     }
     this.startedAt = Date.now() / 1000
   }
@@ -175,7 +176,7 @@ export class LoginSession {
       Object.keys(acct).length === 0
     ) {
       throw new LoginError(
-        '登入完成但讀不到憑證或帳號資訊。暫存目錄內的檔案：' + (names || '（空）')
+        t('err.loginNoCreds', { files: names || t('common.empty') })
       )
     }
     return { creds, account: acct }

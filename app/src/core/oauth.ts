@@ -1,5 +1,6 @@
 // 用量 API、token refresh 與 UsagePoller。
 // 任何 log、錯誤訊息都不得包含 token。
+import { t } from '../shared/i18n'
 import * as path from 'node:path'
 import * as accounts from './accounts'
 import { withSlotLock } from './lock'
@@ -43,26 +44,26 @@ export interface UsageApiRecord extends UsageWindows {
 }
 
 export class TokenExpiredError extends Error {
-  constructor(message = 'token 已過期，需要重新登入') {
+  constructor(message = t('err.tokenExpired')) {
     super(message)
     this.name = 'TokenExpiredError'
   }
 }
 export class RateLimitedError extends Error {
-  constructor(message = '查詢太頻繁，稍後再試') {
+  constructor(message = t('err.rateLimited')) {
     super(message)
     this.name = 'RateLimitedError'
   }
 }
 /** HTTP 403：通常是 Cloudflare 擋下（IP 或請求模式），不是 token 問題。 */
 export class BlockedError extends Error {
-  constructor(message = '請求被伺服器擋下（HTTP 403），暫停查詢 15 分鐘') {
+  constructor(message = t('err.forbidden')) {
     super(message)
     this.name = 'BlockedError'
   }
 }
 export class RefreshFailedError extends Error {
-  constructor(message = 'token 更新失敗，需要重新登入') {
+  constructor(message = t('err.refreshFailed')) {
     super(message)
     this.name = 'RefreshFailedError'
   }
@@ -102,7 +103,7 @@ export async function fetchUsage(
   if (res.status === 401) throw new TokenExpiredError()
   if (res.status === 403) throw new BlockedError()
   if (res.status === 429) throw new RateLimitedError()
-  if (res.status !== 200) throw new Error(`用量 API 回應 HTTP ${res.status}`)
+  if (res.status !== 200) throw new Error(t('err.usageHttp', { status: res.status }))
   const body: unknown = await res.json()
   const o = isObj(body) ? body : {}
   return { five_hour: toWindow(o.five_hour), seven_day: toWindow(o.seven_day) }
@@ -128,11 +129,11 @@ export async function refreshToken(
   if (res.status === 400 || res.status === 401) throw new RefreshFailedError()
   if (res.status === 403) throw new BlockedError()
   if (res.status === 429) throw new RateLimitedError()
-  if (res.status !== 200) throw new Error(`token 更新 API 回應 HTTP ${res.status}`)
+  if (res.status !== 200) throw new Error(t('err.refreshHttp', { status: res.status }))
   const body: unknown = await res.json()
   const o = isObj(body) ? body : {}
   if (typeof o.access_token !== 'string' || !o.access_token) {
-    throw new Error('token 更新 API 回應格式不正確')
+    throw new Error(t('err.refreshFormat'))
   }
   const expiresIn = typeof o.expires_in === 'number' ? o.expires_in : 3600
   return {
@@ -211,7 +212,7 @@ export class UsagePoller {
         try {
           await this.pollSlot(slot.id)
         } catch (e) {
-          this.logFn('error', `帳號「${slot.name}」查詢用量時發生未預期錯誤（${errName(e)}：${errDetail(e)}）`)
+          this.logFn('error', t('log.pollUnexpected', { name: slot.name, kind: errName(e), detail: errDetail(e) }))
         }
       }
       return true
@@ -248,13 +249,13 @@ export class UsagePoller {
     try {
       if (active) {
         oauth = oauthOf(storage.readJson(paths.credFile(), null))
-        if (!oauth) return write(null, '找不到登入憑證')
+        if (!oauth) return write(null, t('err.noCredentials'))
         if (typeof oauth.expiresAt === 'number' && oauth.expiresAt <= nowMs) {
           return write(null, 'token_expired_active')
         }
       } else {
         oauth = oauthOf(slot.credentials)
-        if (!oauth) return write(null, '找不到登入憑證')
+        if (!oauth) return write(null, t('err.noCredentials'))
         if (typeof oauth.expiresAt === 'number' && oauth.expiresAt - nowMs < REFRESH_AHEAD_MS) {
           oauth = await this.refresh(slot.id, slot.name, oauth)
         }
@@ -277,8 +278,8 @@ export class UsagePoller {
           usage = await fetchUsage(oauth.accessToken, this.fetchImpl)
         } catch (e2) {
           if (e2 instanceof TokenExpiredError) {
-            this.logFn('warn', `帳號「${slot.name}」token 更新後仍被拒絕`)
-            return write(null, 'token 已過期，需要重新登入')
+            this.logFn('warn', t('log.refreshStillRejected', { name: slot.name }))
+            return write(null, t('err.tokenExpired'))
           }
           throw e2
         }
@@ -287,15 +288,15 @@ export class UsagePoller {
     } catch (e) {
       if (e instanceof BlockedError) {
         this.blockedUntil = this.now() + BLOCKED_BACKOFF_MS
-        this.logFn('warn', `用量 API 回應 403（可能被 Cloudflare 擋下），15 分鐘內不再查詢任何帳號`)
+        this.logFn('warn', t('log.usage403'))
         write(null, e.message)
       } else if (e instanceof RateLimitedError) {
         this.backoffUntil.set(slotId, this.now() + RATE_LIMIT_BACKOFF_MS)
-        this.logFn('warn', `帳號「${slot.name}」被限流，10 分鐘內不再查詢`)
-        write(null, '查詢太頻繁，稍後再試')
+        this.logFn('warn', t('log.accountRateLimited', { name: slot.name }))
+        write(null, t('err.rateLimited'))
       } else if (e instanceof RefreshFailedError) {
-        this.logFn('warn', `帳號「${slot.name}」token 更新失敗，需要重新登入`)
-        write(null, 'token 已過期，需要重新登入', true)
+        this.logFn('warn', t('log.refreshFailedRelogin', { name: slot.name }))
+        write(null, t('err.tokenExpired'), true)
       } else {
         const slotOauth = oauthOf(slot.credentials)
         const detail = errDetail(e, [
@@ -304,8 +305,8 @@ export class UsagePoller {
           slotOauth?.accessToken ?? '',
           slotOauth?.refreshToken ?? ''
         ])
-        this.logFn('warn', `帳號「${slot.name}」用量 API 暫時無法使用（${detail}）`)
-        write(null, `用量 API 暫時無法使用（${detail}）`)
+        this.logFn('warn', t('log.usageUnavailable', { name: slot.name, detail }))
+        write(null, t('err.usageUnavailable', { detail }))
       }
     }
   }
@@ -337,17 +338,20 @@ export class UsagePoller {
           ts: prev ? prev.ts : Math.floor(nowMs / 1000),
           five_hour: prev ? prev.five_hour : null,
           seven_day: prev ? prev.seven_day : null,
-          error: 'token 已過期，需要重新登入',
+          error: t('err.tokenExpired'),
           needs_relogin: true,
           saved_at: slot.saved_at
         }
         storage.writeJsonAtomic(usageApiFile(slotId), rec)
-        this.logFn('warn', `帳號「${slot.name}」token 更新失敗，需要重新登入`)
+        this.logFn('warn', t('log.refreshFailedRelogin', { name: slot.name }))
         return 'dead'
       }
       this.logFn(
         'warn',
-        `帳號「${slot.name}」切換前更新 token 失敗（${errDetail(e, [oauth.accessToken, oauth.refreshToken])}）`
+        t('log.preSwitchRefreshFailed', {
+        name: slot.name,
+        detail: errDetail(e, [oauth.accessToken, oauth.refreshToken])
+      })
       )
       return 'error'
     }
@@ -379,11 +383,11 @@ export class UsagePoller {
         const cred = storage.readJson(paths.credFile(), null)
         const credOauth = oauthOf(cred)
         if (!isObj(cred) || !credOauth || credOauth.refreshToken !== sentRt) {
-          this.logFn('warn', `帳號「${name}」在更新 token 期間變成使用中且憑證已被更換，丟棄新 token`)
+          this.logFn('warn', t('log.refreshDiscarded', { name }))
           throw new RefreshFailedError()
         }
         storage.writeJsonAtomic(paths.credFile(), { ...cred, claudeAiOauth: fresh })
-        this.logFn('info', `帳號「${name}」在更新 token 期間變成使用中，已同步寫入目前登入憑證`)
+        this.logFn('info', t('log.refreshSynced', { name }))
       } else {
         const slotOauth = oauthOf(slot.credentials)
         if (slotOauth && slotOauth.refreshToken !== sentRt) {
@@ -391,22 +395,22 @@ export class UsagePoller {
         }
       }
       accounts.updateSlot({ ...slot, credentials: { ...slot.credentials, claudeAiOauth: fresh } })
-      this.logFn('info', `帳號「${name}」已更新 token`)
+      this.logFn('info', t('log.refreshed', { name }))
       return fresh
     })
   }
 }
 
 function errName(e: unknown): string {
-  return e instanceof Error ? e.name : '未知錯誤'
+  return e instanceof Error ? e.name : t('common.unknownError')
 }
 
 /** 錯誤的簡短說明（含 HTTP 狀態或網路錯誤原因）；遮蔽 token，最長 120 字。 */
 export function errDetail(e: unknown, secrets: string[] = []): string {
   let s = e instanceof Error ? e.message || e.name : String(e)
   const cause = e instanceof Error ? (e as Error & { cause?: unknown }).cause : undefined
-  if (cause instanceof Error && cause.message) s += `：${cause.message}`
-  for (const t of secrets) if (t) s = s.split(t).join('<token>')
+  if (cause instanceof Error && cause.message) s += t('common.detailSep') + cause.message
+  for (const tok of secrets) if (tok) s = s.split(tok).join('<token>')
   return s.length > 120 ? s.slice(0, 120) + '…' : s
 }
 

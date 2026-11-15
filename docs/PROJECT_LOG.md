@@ -74,3 +74,7 @@
 - 使用者回報兩個帳號都顯示「額度已用完」→ 查明：live 切換後執行中 claude 的 statusline 仍回報切換前帳號（F115112109）的 rate_limits，但被標成新帳號，monitor 誤判 abcz 超過門檻並把它標成用完到 02:10。修正（`docs/work/hot-swap-safety/2b-stale-statusline.md`）：statusline 與用量 API 的 `resets_at` 相差超過 1 小時視為舊帳號資料不採用；總覽警示加「清除用完標記」；總覽帳號摘要顯示 5 小時／7 天下次重置時間。400 個測試通過、typecheck 通過、假資料截圖確認；portable exe 重建中。
 - 使用者要求實作改用 agy Flash、驗證用 Claude Sonnet，並做模型分工第二期；追加「依用量跨供應商遞補（Claude 都用完改 agy Sonnet）」與「/compact 後清畫面」→ 實測 `JETSKI_OAUTH_TOKEN` 不會覆蓋 agy 登入，退回同時只用一個 agy 帳號（可同時跑 N 個任務，預設 2）；新增派工頁、Claude 可用性判斷（與自動切換共用）、`routing.json` 跨供應商遞補清單、整理後送 Ctrl+L（不用 /clear 以保留摘要）。規格審查 11 條採用；實作 agy Flash 4 次派工（3 個問題由主導者修正），Sonnet 實作審查 5 條全採用。449 個測試通過。Ctrl+L 清畫面待使用者實測。
 - 使用者要求推到 GitHub → 建立 git repo 與根目錄 `.gitignore`（排除建置產物、`__pycache__`、含 email 的 agy log、截圖），掃描確認無 email／token 後 commit `488f0c7` 並推送 `main`。
+- 使用者要求：多國語言並自動偵測系統語言、README 改英文、工作列圖示（白紙）改成程式圖示，並詢問模型分工是否需要 skill。
+  - 圖示：原為 Electron 範本預設圖；新畫雙人頭像＋切換箭頭（`app/build/icon-src/icon.svg`，以 Electron 轉 PNG、PIL 產生 ico／icns）。白紙原因：Windows 視窗未設 icon，系統匣從 asar 讀圖 → 視窗一律設 icon，打包後改讀 extraResources 的實體檔。
+  - README：改寫為英文並更新到目前功能（live 切換、agy、模型分工、派工、自動整理），說明模型分工需由 skill 或 CLAUDE.md 指示 Claude Code 呼叫 `switcher-run`。
+  - 多國語言（`docs/work/i18n/`）：繁中＋英文，`auto` 依系統語言（zh-TW／HK／MO／Hant 為繁中，其他英文），設定「一般」頁可指定。規格審查 9 條全採用；T-1 agy Flash 無產出改 Sonnet、T-2 agy Flash（主導者修 2 個問題）、T-3 Sonnet；實作審查（兩位 Sonnet）採用 6 條。464 個測試通過、英文截圖確認。portable exe 重建。

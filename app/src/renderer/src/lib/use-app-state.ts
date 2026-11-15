@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { AppState, Result } from '../../../shared/types'
+import { t } from '../../../shared/i18n'
 
 export function useAppState(): AppState | null {
   const [state, setState] = useState<AppState | null>(null)
@@ -35,12 +36,12 @@ export async function act(p: Promise<Result>, successMsg?: string): Promise<bool
       return true
     }
     if (r.code === 'NODE_MISSING') {
-      toast.error(r.error, { description: '找不到 Node.js，請先安裝 Node.js（https://nodejs.org）後再試。' })
+      toast.error(r.error, { description: t('error.nodeMissingDesc') })
     } else {
       toast.error(r.error)
     }
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '發生未知錯誤')
+    toast.error(e instanceof Error ? e.message : t('common.unknownErrorLong'))
   }
   return false
 }

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { act } from '@/lib/use-app-state'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   state: AppState
@@ -36,41 +37,42 @@ export function AccountsPage({
   agyDialog,
   onAgyDialog
 }: Props): React.JSX.Element {
+  const t = useT()
   const busy = state.switching
   const agyBusy = state.agyLogin.state === 'waiting' || state.agyLogin.state === 'signed_in'
   return (
     <div className="space-y-6">
       <PageHeader
-        title="帳號"
-        description="依公司分組；新增帳號不影響目前登入的帳號。"
+        title={t('accounts.title')}
+        description={t('accounts.description')}
         actions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm">
-                <Plus /> 新增帳號
+                <Plus /> {t('accounts.addAccount')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-56">
-              <DropdownMenuLabel>Anthropic（Claude）</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('accounts.anthropicGroup')}</DropdownMenuLabel>
               <DropdownMenuItem
                 disabled={busy}
                 onSelect={() => void act(window.api.startLogin(state.config.login_browser))}
               >
-                <Globe /> 瀏覽器登入
+                <Globe /> {t('accounts.browserLogin')}
               </DropdownMenuItem>
               <DropdownMenuItem disabled={busy || !state.current.unsaved} onSelect={onSaveCurrent}>
-                <Save /> 儲存目前登入的帳號
+                <Save /> {t('accounts.saveCurrentLogin')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Google（agy）</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('accounts.googleGroup')}</DropdownMenuLabel>
               <DropdownMenuItem disabled={agyBusy} onSelect={() => onAgyDialog('add')}>
-                <Terminal /> 登入新帳號
+                <Terminal /> {t('accounts.loginNewAgy')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={agyBusy || !state.agyCurrent?.unsaved}
                 onSelect={() => onAgyDialog('save')}
               >
-                <Save /> 儲存目前 agy 登入
+                <Save /> {t('accounts.saveCurrentAgy')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -80,7 +82,7 @@ export function AccountsPage({
       <section aria-label="Anthropic" className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h3 className="text-sm font-semibold">Anthropic</h3>
-          <span className="text-xs text-muted-foreground tabular-nums">{state.accounts.length} 個</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{t('common.countItems', { count: state.accounts.length })}</span>
           <div className="ml-auto flex items-center gap-2">
             {state.current.unsaved && (
               <Button
@@ -90,7 +92,7 @@ export function AccountsPage({
                 disabled={busy}
                 onClick={onSaveCurrent}
               >
-                <Save /> 儲存目前登入（{state.current.email ?? '未知'}）
+                <Save /> {t('accounts.saveCurrentWithEmail', { email: state.current.email ?? t('common.unknownLabel') })}
               </Button>
             )}
             <Tooltip>
@@ -98,20 +100,20 @@ export function AccountsPage({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="重新整理用量"
+                  aria-label={t('topbar.refreshUsage')}
                   disabled={state.usagePolling}
                   onClick={() => void act(window.api.refreshUsage())}
                 >
                   <RefreshCw className={state.usagePolling ? 'animate-spin' : undefined} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>重新整理用量</TooltipContent>
+              <TooltipContent>{t('topbar.refreshUsage')}</TooltipContent>
             </Tooltip>
           </div>
         </div>
         {state.accounts.length === 0 ? (
           <p className="rounded-md border border-dashed p-4 text-sm text-pretty text-muted-foreground">
-            還沒有 Anthropic 帳號。從頁首「新增帳號」選 Anthropic，再登入或儲存目前的登入。
+            {t('accounts.emptyAnthropic')}
           </p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">

@@ -1,4 +1,10 @@
 // 使用者設定（config.json）。
+import {
+  BUILTIN_CONTINUE_PROMPTS,
+  defaultContinuePrompt,
+  resolveLanguage,
+  type LangSetting
+} from '../shared/i18n'
 import * as paths from './paths'
 import * as storage from './storage'
 
@@ -17,6 +23,8 @@ export interface Config {
   close_to_tray: boolean
   /** 開機自動啟動（以 --hidden 在背景啟動） */
   launch_at_login: boolean
+  /** 介面語言；auto = 依系統語言 */
+  language: LangSetting
   [key: string]: unknown
 }
 
@@ -55,7 +63,8 @@ export const DEFAULTS: Config = {
   switch_mode: 'live',
   auto_compact: { ...AUTO_COMPACT_DEFAULTS, folders: [] },
   close_to_tray: false,
-  launch_at_login: false
+  launch_at_login: false,
+  language: 'auto'
 }
 
 /** 讀取設定並與預設值合併；檔案不存在或壞掉時回傳預設值。 */
@@ -67,13 +76,32 @@ export function load(): Config {
   if (validateSwitchMode(cfg.switch_mode) === null) cfg.switch_mode = DEFAULTS.switch_mode
   if (typeof cfg.close_to_tray !== 'boolean') cfg.close_to_tray = DEFAULTS.close_to_tray
   if (typeof cfg.launch_at_login !== 'boolean') cfg.launch_at_login = DEFAULTS.launch_at_login
+  const lang = validateLanguage(cfg.language)
+  cfg.language = lang ?? DEFAULTS.language
   const cp = validateContinuePrompt(cfg.continue_prompt)
-  cfg.continue_prompt = cp === null ? DEFAULTS.continue_prompt : cp
+  cfg.continue_prompt = localizeContinuePrompt(cp, resolveLanguage(cfg.language))
   return cfg
 }
 
 export function save(cfg: Partial<Config>): void {
   storage.writeJsonAtomic(paths.configFile(), cfg)
+}
+
+/** 驗證語言設定；合法回傳字串，否則 null。 */
+export function validateLanguage(v: unknown): LangSetting | null {
+  return v === 'auto' || v === 'zh-TW' || v === 'en' ? v : null
+}
+
+/**
+ * 接續提示的語言對應：無效（null）或等於任一語言的內建預設時視為「未自訂」，
+ * 換成目前語言的預設；其他值（含空字串）維持原樣。
+ */
+export function localizeContinuePrompt(
+  v: string | null,
+  lang: 'zh-TW' | 'en'
+): string {
+  if (v === null || BUILTIN_CONTINUE_PROMPTS.includes(v)) return defaultContinuePrompt(lang)
+  return v
 }
 
 /** 驗證切換方式；合法回傳字串，否則 null。 */

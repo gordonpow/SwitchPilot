@@ -1,5 +1,6 @@
 // 帳號 slot 管理、目前帳號判斷、切換。
 // 同步 API；跨 await 的寫入競爭由呼叫端以 lock.withSlotLock 序列化。
+import { t } from '../shared/i18n'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -114,7 +115,7 @@ export function saveCurrent(name: string): Slot {
   const creds = storage.readJson(paths.credFile(), null)
   const acct = currentAccount()
   if (!isObj(creds) || Object.keys(creds).length === 0 || !acct) {
-    throw new AccountError('找不到目前登入的帳號，請先在 claude 中 /login')
+    throw new AccountError(t('err.noCurrentAccount'))
   }
   return addSlot(name, creds, acct)
 }
@@ -159,7 +160,7 @@ export function syncCurrentBack(): boolean {
 
 export function switchTo(slotId: string): void {
   let slot = getSlot(slotId)
-  if (!slot) throw new AccountError('找不到指定的帳號')
+  if (!slot) throw new AccountError(t('err.accountNotFound'))
   syncCurrentBack()
   // 同步可能更新了目標 slot（目標即目前帳號時），重讀
   slot = getSlot(slotId) ?? slot
@@ -173,13 +174,13 @@ export function switchTo(slotId: string): void {
     }
   }
   if (!isDeepStrictEqual(storage.readJson(paths.credFile(), null), slot.credentials)) {
-    throw new AccountError('切換後驗證失敗：憑證內容與帳號不一致')
+    throw new AccountError(t('err.verifyFailed'))
   }
   storage.writeJsonAtomic(paths.activeFile(), { switched_at: Date.now() / 1000 })
 }
 
 export function deleteSlot(slotId: string): void {
-  if (slotId === currentSlotId()) throw new AccountError('無法刪除使用中的帳號')
+  if (slotId === currentSlotId()) throw new AccountError(t('err.cannotDeleteActive'))
   try {
     fs.unlinkSync(slotPath(slotId))
   } catch (e) {
@@ -189,9 +190,9 @@ export function deleteSlot(slotId: string): void {
 
 export function renameSlot(slotId: string, name: string): Slot {
   const trimmed = name.trim()
-  if (!trimmed) throw new AccountError('名稱不可為空')
+  if (!trimmed) throw new AccountError(t('err.nameEmpty'))
   const slot = getSlot(slotId)
-  if (!slot) throw new AccountError('找不到指定的帳號')
+  if (!slot) throw new AccountError(t('err.accountNotFound'))
   slot.name = trimmed
   updateSlot(slot)
   return slot

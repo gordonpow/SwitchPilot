@@ -163,6 +163,7 @@ function initial(): AppState {
       { runId: 'r1', cwd: 'C:\\presonal_project\\Switching_account', state: 'running' },
       { runId: 'r2', cwd: 'C:\\work\\demo', state: 'waiting' }
     ],
+    language: 'zh-TW',
     switching: false,
     pending: false,
     usagePolling: false,
@@ -187,7 +188,8 @@ function initial(): AppState {
         clear_screen_after: true
       },
       close_to_tray: false,
-      launch_at_login: false
+      launch_at_login: false,
+      language: 'auto'
     },
     integration: { installed: true, needsUpdate: false, nodeFound: true },
     clis: [

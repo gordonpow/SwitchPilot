@@ -1,5 +1,6 @@
 // agy 登入資料（Windows 認證管理員 gemini:antigravity）的存取。透過 agycred.ps1 呼叫，不 import electron。
 // 錯誤訊息不得包含 blob、token、stdout 或 stderr 的內容。
+import { t } from '../shared/i18n'
 import { execFile } from 'node:child_process'
 import * as path from 'node:path'
 import * as paths from './paths'
@@ -61,7 +62,7 @@ export function defaultCredOps(ps1Path?: string, exec: ExecFn = defaultExec): Ag
     async read() {
       const r = await run('read')
       if (r.code === 3) return null
-      if (r.code !== 0) throw new Error(`讀取 agy 登入資料失敗（exit ${r.code ?? '逾時'}）`)
+      if (r.code !== 0) throw new Error(t('err.agyReadFailed', { code: r.code ?? t('common.timeout') }))
       try {
         const j = JSON.parse(r.stdout.trim()) as { user?: unknown; blob_b64?: unknown }
         if (typeof j.blob_b64 !== 'string') throw new Error('x')
@@ -70,7 +71,7 @@ export function defaultCredOps(ps1Path?: string, exec: ExecFn = defaultExec): Ag
           blob: Buffer.from(j.blob_b64, 'base64').toString('utf-8')
         }
       } catch {
-        throw new Error('agy 登入資料格式無法解析')
+        throw new Error(t('err.agyParse'))
       }
     },
     async write(c) {
@@ -79,11 +80,11 @@ export function defaultCredOps(ps1Path?: string, exec: ExecFn = defaultExec): Ag
         blob_b64: Buffer.from(c.blob, 'utf-8').toString('base64')
       })
       const r = await run('write', line + '\n')
-      if (r.code !== 0) throw new Error(`寫入 agy 登入資料失敗（exit ${r.code ?? '逾時'}）`)
+      if (r.code !== 0) throw new Error(t('err.agyWriteFailed', { code: r.code ?? t('common.timeout') }))
     },
     async remove() {
       const r = await run('delete')
-      if (r.code !== 0) throw new Error(`刪除 agy 登入資料失敗（exit ${r.code ?? '逾時'}）`)
+      if (r.code !== 0) throw new Error(t('err.agyDeleteFailed', { code: r.code ?? t('common.timeout') }))
     }
   }
 }
