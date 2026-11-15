@@ -1,0 +1,22 @@
+appId: local.claude-switcher
+productName: Claude Account Switcher
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!tests/*'
+  - '!scripts/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts,components.json}'
+  - '!{dist,dist-*}/**'
+extraResources:
+  - from: resources/scripts
+    to: scripts
+win:
+  target: portable
+  executableName: claude-account-switcher
+npmRebuild: false

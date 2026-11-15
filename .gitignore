@@ -1,0 +1,19 @@
+# 建置產物
+node_modules/
+out/
+dist/
+dist-*/
+app/resources/scripts/
+.eslintcache
+*.log*
+
+# Python
+__pycache__/
+*.pyc
+
+# 含帳號資訊：agy 執行紀錄、截圖
+*.agy.log
+img/
+
+# 暫存
+docs/work/**/diff.patch
