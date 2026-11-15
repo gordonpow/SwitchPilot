@@ -19,6 +19,7 @@
 
 ### 已發布
 
+- **v1.1.0 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.0 ，commit `638eaa9`，資產 `Claude-Account-Switcher-1.1.0.exe`（SHA-256 `0e677bcc…67f2`，與 GitHub `digest` 一致）。自動更新、模型分工設定引導、全部用完換到最早重置帳號、工作列圖示修正。
 - **v1.0.0 預覽版**（2026-11-15）：GitHub Release https://github.com/gordonpow/Switching_account/releases/tag/v1.0.0 ，資產 `Claude-Account-Switcher-1.0.0.exe`（SHA-256 `bf99bcf2…cca2`，未簽章）。
 初版 `488f0c7`（2026-11-15 推送）包含以下全部功能；之後：多國語言與程式圖示 `27b0ff8`、英文 README 與 model-routing skill `d67d0e7`。
 
@@ -85,4 +86,4 @@
 - 使用者要求：模型分工 skill 的逐步設定引導（App 內＋README）與功能開關（`docs/work/skill-setup/`）→ 規格審查 10 條採用；agy Flash 做一半後被拒，Sonnet 接手完成。設定「模型分工」頁：啟用開關、6 步設定引導卡片（Node、派工工具、agy、agy 帳號、安裝／更新／移除 skill、範例指令）；關閉時隱藏派工並詢問移除 skill；`switcher-run` 關閉時一律 delegate。487 個測試通過。
 - 使用者要求：每 10 分鐘檢查更新、紅點引導、自動下載並替換（`docs/work/auto-update/`）→ 規格審查 9 條採用；T-1A（updater、update.ps1）agy Flash、T-1B（controller、介面）Sonnet；實作審查無高、中 6 條＋低 2 條採用並由 Sonnet 修正。537 個測試通過。版本號提高到 1.1.0。
 - 使用者要求：兩個帳號都用完時換到最早重置的帳號（`docs/work/earliest-reset/`）→ Sonnet 實作；實作審查無高，採用 6 條（restart 模式維持原行為、等待期間只暫停 60 秒、失敗還原、resume 前確認可用並順延、只對 rate_limit 停下的 session 送提示、補測試），不採用 1 條（排程只在記憶體，列為已知限制）。設定「帳號切換」頁有開關（預設開）。557 個測試通過。
-- 重建 `Claude Account Switcher 1.1.0.exe`（18:02），以假資料啟動實際 portable exe 截工作列，確認顯示新圖示。尚未 commit、未發布。
+- 重建 `Claude Account Switcher 1.1.0.exe`（18:02），以假資料啟動實際 portable exe 截工作列，確認顯示新圖示。commit `638eaa9` 並發布 v1.1.0 預覽版（刪除 agy 誤建的根目錄 `package.json`）。
