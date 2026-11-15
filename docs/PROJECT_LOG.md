@@ -19,6 +19,7 @@
 
 ### 已發布
 
+- **v1.1.1 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.1 ，commit `58dcd07`，資產 `Claude-Account-Switcher-1.1.1.exe`（SHA-256 `7e00aa4c…ffdb`，與 GitHub `digest` 一致）。額度提前恢復（重置卡）自動解除標記並切換。
 - **v1.1.0 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.0 ，commit `638eaa9`，資產 `Claude-Account-Switcher-1.1.0.exe`（SHA-256 `0e677bcc…67f2`，與 GitHub `digest` 一致）。自動更新、模型分工設定引導、全部用完換到最早重置帳號、工作列圖示修正。
 - **v1.0.0 預覽版**（2026-11-15）：GitHub Release https://github.com/gordonpow/Switching_account/releases/tag/v1.0.0 ，資產 `Claude-Account-Switcher-1.0.0.exe`（SHA-256 `bf99bcf2…cca2`，未簽章）。
 初版 `488f0c7`（2026-11-15 推送）包含以下全部功能；之後：多國語言與程式圖示 `27b0ff8`、英文 README 與 model-routing skill `d67d0e7`。
@@ -88,3 +89,4 @@
 - 使用者要求：兩個帳號都用完時換到最早重置的帳號（`docs/work/earliest-reset/`）→ Sonnet 實作；實作審查無高，採用 6 條（restart 模式維持原行為、等待期間只暫停 60 秒、失敗還原、resume 前確認可用並順延、只對 rate_limit 停下的 session 送提示、補測試），不採用 1 條（排程只在記憶體，列為已知限制）。設定「帳號切換」頁有開關（預設開）。557 個測試通過。
 - 重建 `Claude Account Switcher 1.1.0.exe`（18:02），以假資料啟動實際 portable exe 截工作列，確認顯示新圖示。commit `638eaa9` 並發布 v1.1.0 預覽版（刪除 agy 誤建的根目錄 `package.json`）。
 - 使用者回報：中途用重置卡後用完標記不會消失、也不會自動切換（`docs/work/early-reset/`）→ 用量 API 顯示已低於門檻（資料晚於標記 60 秒以上）時自動清除標記；live 模式下目前帳號恢復則送繼續，其他帳號恢復且目前帳號仍被擋則切過去並送繼續（不需事先排程，App 重啟後也有效）。Sonnet 實作、主導者補沒有排程的情境。
+- 使用者要求發布 → commit `58dcd07`、發布 v1.1.1 預覽版（1.1.0 使用者可由此實測自動更新）。
