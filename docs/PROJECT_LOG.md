@@ -19,6 +19,7 @@
 
 ### 已發布
 
+- **v1.1.2 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.2 ，commit `df7e0ab`，資產 `Claude-Account-Switcher-1.1.2.exe`（SHA-256 `c6e3ead4…26a3`）。舊版用完標記在額度恢復後不清除的修正。
 - **v1.1.1 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.1 ，commit `58dcd07`，資產 `Claude-Account-Switcher-1.1.1.exe`（SHA-256 `7e00aa4c…ffdb`，與 GitHub `digest` 一致）。額度提前恢復（重置卡）自動解除標記並切換。
 - **v1.1.0 預覽版**（2026-11-15）：https://github.com/gordonpow/Switching_account/releases/tag/v1.1.0 ，commit `638eaa9`，資產 `Claude-Account-Switcher-1.1.0.exe`（SHA-256 `0e677bcc…67f2`，與 GitHub `digest` 一致）。自動更新、模型分工設定引導、全部用完換到最早重置帳號、工作列圖示修正。
 - **v1.0.0 預覽版**（2026-11-15）：GitHub Release https://github.com/gordonpow/Switching_account/releases/tag/v1.0.0 ，資產 `Claude-Account-Switcher-1.0.0.exe`（SHA-256 `bf99bcf2…cca2`，未簽章）。
