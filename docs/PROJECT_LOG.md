@@ -19,6 +19,7 @@
 
 ### 已發布
 
+- **v1.0.0 預覽版**（2026-11-15）：GitHub Release https://github.com/gordonpow/Switching_account/releases/tag/v1.0.0 ，資產 `Claude-Account-Switcher-1.0.0.exe`（SHA-256 `bf99bcf2…cca2`，未簽章）。
 初版 `488f0c7`（2026-11-15 推送）包含以下全部功能；之後：多國語言與程式圖示 `27b0ff8`、英文 README 與 model-routing skill `d67d0e7`。
 
 - Python 版帳號切換器 GUI（AC-1～AC-9）：`switcher/`、`tests/`（71 個 unittest 通過）、`啟動切換器.bat`。
@@ -79,3 +80,4 @@
   - README：改寫為英文並更新到目前功能（live 切換、agy、模型分工、派工、自動整理），說明模型分工需由 skill 或 CLAUDE.md 指示 Claude Code 呼叫 `switcher-run`。
   - 多國語言（`docs/work/i18n/`）：繁中＋英文，`auto` 依系統語言（zh-TW／HK／MO／Hant 為繁中，其他英文），設定「一般」頁可指定。規格審查 9 條全採用；T-1 agy Flash 無產出改 Sonnet、T-2 agy Flash（主導者修 2 個問題）、T-3 Sonnet；實作審查（兩位 Sonnet）採用 6 條。464 個測試通過、英文截圖確認。portable exe 重建。
 - 使用者確認模型分工需要 skill 才會被 Claude Code 使用 → 新增 `skills/model-routing/SKILL.md`（英文，從 dev-workflow 派工段落整理：讀 routing.json、呼叫 switcher-run、exit code、agy 提示規則、失敗處理），README 說明安裝方式。commit `27b0ff8`、`d67d0e7` 並推送。
+- 使用者要求發布 exe → 建立 GitHub Release `v1.0.0`（pre-release），上傳 portable exe，release notes 英文＋繁中（含未簽章 SmartScreen 說明、SHA-256、條款提醒）。
