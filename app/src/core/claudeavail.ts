@@ -65,8 +65,6 @@ export function slotBlocked(
   return false
 }
 
-/** 舊資料沒有 exhausted_at 時，以 exhausted_until 往前推 5 小時當作標記時間。 */
-const LEGACY_EXHAUST_WINDOW_S = 18000
 /** 用量資料需比標記時間晚至少這麼多秒，才視為標記之後的新資料。 */
 const RECOVER_MIN_GAP_S = 60
 
@@ -82,8 +80,9 @@ export function exhaustedRecovered(
 ): boolean {
   const until = slot.exhausted_until || 0
   if (until <= 0 || !rec || rec.needs_relogin === true || typeof rec.ts !== 'number') return false
-  const markedAt = slot.exhausted_at && slot.exhausted_at > 0 ? slot.exhausted_at : until - LEGACY_EXHAUST_WINDOW_S
-  if (rec.ts < markedAt + RECOVER_MIN_GAP_S) return false
+  // 舊版寫的標記沒有 exhausted_at（標記時間不明；until 可能是 7 天視窗的重置時間，不能用 until 回推）：
+  // 只要有低於門檻的用量資料就視為恢復。新標記一律帶 exhausted_at。
+  if (slot.exhausted_at && slot.exhausted_at > 0 && rec.ts < slot.exhausted_at + RECOVER_MIN_GAP_S) return false
   let seen = 0
   for (const w of [rec.five_hour, rec.seven_day]) {
     const used = w && typeof w.used_percentage === 'number' ? w.used_percentage : null

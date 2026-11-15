@@ -30,10 +30,10 @@ describe('exhaustedRecovered', () => {
   it('沒資料的視窗不算超過', () => {
     expect(exhaustedRecovered(slot, { ts: T + 100, five_hour: win(3), seven_day: null }, 95)).toBe(true)
   })
-  it('舊資料無 exhausted_at：用 exhausted_until - 18000', () => {
-    const old = { id: 'a', saved_at: 0, exhausted_until: T + 18000 }
-    expect(exhaustedRecovered(old, { ts: T + 59, five_hour: win(3) }, 95)).toBe(false)
-    expect(exhaustedRecovered(old, { ts: T + 60, five_hour: win(3) }, 95)).toBe(true)
+  it('舊資料無 exhausted_at（例如 7 天視窗的標記，until 在數天後）：有低於門檻的資料就視為恢復', () => {
+    const old = { id: 'a', saved_at: 0, exhausted_until: T + 4 * 86400 }
+    expect(exhaustedRecovered(old, { ts: T, seven_day: win(0) }, 95)).toBe(true)
+    expect(exhaustedRecovered(old, { ts: T, five_hour: null, seven_day: win(99) }, 95)).toBe(false)
   })
   it('needs_relogin → false', () => {
     expect(exhaustedRecovered(slot, { ts: T + 100, needs_relogin: true, five_hour: win(3) }, 95)).toBe(false)
