@@ -79,20 +79,41 @@ node ~/.claude-switcher/bin/switcher-run.cjs --role <role> --prompt <prompt file
 | Exit code | Meaning |
 |---|---|
 | `0` | agy completed the task. The answer is in the result file. |
-| `10` | Delegate: the next entry is a Claude model. The last JSON line names the model. Run the task with that model. |
+| `10` | Delegate: the next entry is a Claude model, or model routing is turned off. The last JSON line names the model. Run the task with that model. |
 | `1` | Failed. Read `message` in the last JSON line and `<result file>.agy.log`. |
 | `2` | Invalid arguments |
 
 The **Dispatch** page shows running and recent dispatches.
 
-**Claude Code does not use the routing by itself.** The dispatcher is a command-line tool. Claude Code calls it only when a skill or `CLAUDE.md` tells it to. This repository includes that skill: [`skills/model-routing/SKILL.md`](skills/model-routing/SKILL.md). Install it for all your projects:
+**Claude Code does not use the routing by itself.** The dispatcher is a command-line tool. Claude Code calls it only when a skill tells it to. This repository includes that skill: [`skills/model-routing/SKILL.md`](skills/model-routing/SKILL.md). The app contains a copy of it and can install it for you.
+
+### Set up model routing (step by step)
+
+Open **Settings → Model routing**. The **Setup guide** card at the top shows each step with its status. Click **Check again** after you complete a step.
+
+1. **Node.js 22 or later.** Install it from [nodejs.org](https://nodejs.org) and make sure `node` is on `PATH`. Restart the app.
+2. **Dispatcher.** The app installs `~/.claude-switcher/bin/switcher-run.cjs` when it starts. If the step shows as missing, click **Check again** to install it again.
+3. **Antigravity CLI (optional).** Only necessary if your routing contains `agy` entries. Install `agy`, then click **Check again**.
+4. **agy accounts (optional).** In **Accounts → Google**, save at least one agy account. The dispatcher picks an account with quota.
+5. **Install the skill.** Click **Install skill**. The app writes `~/.claude/skills/model-routing/SKILL.md`. If a different version is already there, the app asks first and keeps the old file as `SKILL.md.bak`.
+6. **Start using it.** Open a **new** Claude Code session (skills load when a session starts) and ask, for example:
+   - `Use the model routing to implement T-1 in docs/spec.md`
+   - `依模型分工派工：實作 docs/spec.md 的 T-1`
+
+   Claude Code reads `routing.json`, runs agy entries through the dispatcher, and starts Claude subagents for Claude entries. The **Dispatch** page shows the progress.
+
+To install the skill manually instead, run this in the repository folder:
 
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.claude\skills\model-routing" | Out-Null
 Copy-Item skills\model-routing\SKILL.md "$HOME\.claude\skills\model-routing\"
 ```
 
-Or copy the `skills/model-routing` folder to `.claude/skills/` in one project. Claude Code then uses the routing whenever it delegates a task, or when you ask it to ("dispatch this to agy", "use the routing").
+To use it in one project only, copy the `skills/model-routing` folder to `.claude/skills/` in that project.
+
+### Turn model routing off
+
+If you do not need this feature, turn off **Enable model routing** in **Settings → Model routing**. The app hides the Dispatch page and the routing settings, and asks whether to remove the skill. While it is off, the dispatcher sends every task to Claude (exit code 10).
 
 Account switching, usage display, and auto compact do not need a skill.
 

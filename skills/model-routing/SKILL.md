@@ -49,7 +49,7 @@ If `switcher-run.cjs` does not exist, tell the user and use a Claude subagent fo
 | Exit code | `status` | Action |
 |---|---|---|
 | `0` | `ok` | Read the result file. Check the work yourself (see [Check agy output](#check-agy-output)). |
-| `10` | `delegate` | All agy entries before the next Claude entry failed or had no quota. Start a Claude subagent with the JSON `model` and give it the same prompt. |
+| `10` | `delegate` | All agy entries before the next Claude entry failed or had no quota, or the user turned model routing off in the app. Start a Claude subagent with the JSON `model` and give it the same prompt. |
 | `1` | `failed` | Read `message` and `attempts`, and the log `<result file>.agy.log`. See [Failures](#failures). |
 | `2` | — | Invalid arguments. Fix the command. |
 

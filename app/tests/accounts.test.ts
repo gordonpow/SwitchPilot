@@ -211,10 +211,15 @@ describe('config', () => {
       manage_external: true,
       continue_prompt: '繼續',
       switch_mode: 'live',
+      switch_to_earliest: true,
       auto_compact: config.AUTO_COMPACT_DEFAULTS,
       close_to_tray: false,
       launch_at_login: false,
-      language: 'auto'
+      language: 'auto',
+      routing_enabled: true,
+      update_check: true,
+      update_include_prerelease: true,
+      update_notified_version: ''
     })
     config.save({ threshold: 80 })
     const cfg = config.load()

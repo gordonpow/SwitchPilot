@@ -18,6 +18,8 @@ export interface Config {
   continue_prompt: string
   /** live：不重啟，直接換憑證；restart：結束並以 --resume 重開 */
   switch_mode: 'live' | 'restart'
+  /** 全部帳號都用完時，換到最早重置的帳號（預設開啟） */
+  switch_to_earliest: boolean
   auto_compact: AutoCompact
   /** 按 X 時縮到系統匣 */
   close_to_tray: boolean
@@ -25,6 +27,14 @@ export interface Config {
   launch_at_login: boolean
   /** 介面語言；auto = 依系統語言 */
   language: LangSetting
+  /** 模型分工功能開關（預設開啟） */
+  routing_enabled: boolean
+  /** 自動檢查更新（預設開啟） */
+  update_check: boolean
+  /** 更新時包含預覽版（預設開啟） */
+  update_include_prerelease: boolean
+  /** 已通知過的版本（每個版本只通知一次） */
+  update_notified_version: string
   [key: string]: unknown
 }
 
@@ -61,10 +71,15 @@ export const DEFAULTS: Config = {
   manage_external: true,
   continue_prompt: '繼續',
   switch_mode: 'live',
+  switch_to_earliest: true,
   auto_compact: { ...AUTO_COMPACT_DEFAULTS, folders: [] },
   close_to_tray: false,
   launch_at_login: false,
-  language: 'auto'
+  language: 'auto',
+  routing_enabled: true,
+  update_check: true,
+  update_include_prerelease: true,
+  update_notified_version: ''
 }
 
 /** 讀取設定並與預設值合併；檔案不存在或壞掉時回傳預設值。 */
@@ -74,8 +89,15 @@ export function load(): Config {
   if (data && typeof data === 'object' && !Array.isArray(data)) Object.assign(cfg, data)
   cfg.auto_compact = normalizeAutoCompact((data as Record<string, unknown> | null)?.auto_compact)
   if (validateSwitchMode(cfg.switch_mode) === null) cfg.switch_mode = DEFAULTS.switch_mode
+  if (typeof cfg.switch_to_earliest !== 'boolean') cfg.switch_to_earliest = DEFAULTS.switch_to_earliest
   if (typeof cfg.close_to_tray !== 'boolean') cfg.close_to_tray = DEFAULTS.close_to_tray
   if (typeof cfg.launch_at_login !== 'boolean') cfg.launch_at_login = DEFAULTS.launch_at_login
+  if (typeof cfg.routing_enabled !== 'boolean') cfg.routing_enabled = DEFAULTS.routing_enabled
+  if (typeof cfg.update_check !== 'boolean') cfg.update_check = DEFAULTS.update_check
+  if (typeof cfg.update_include_prerelease !== 'boolean')
+    cfg.update_include_prerelease = DEFAULTS.update_include_prerelease
+  if (typeof cfg.update_notified_version !== 'string')
+    cfg.update_notified_version = DEFAULTS.update_notified_version
   const lang = validateLanguage(cfg.language)
   cfg.language = lang ?? DEFAULTS.language
   const cp = validateContinuePrompt(cfg.continue_prompt)

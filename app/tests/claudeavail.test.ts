@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { claudeAvailable, slotBlocked } from '../src/core/claudeavail'
+import { claudeAvailable, slotAvailableAt, slotBlocked } from '../src/core/claudeavail'
 import { slotsDir, usageApiDir } from '../src/core/paths'
 import { writeJsonAtomic } from '../src/core/storage'
 import { useTempEnv } from './helpers'
@@ -125,5 +125,30 @@ describe('claudeavail', () => {
       expect(allBlocked.available).toBe(false)
       expect(allBlocked.reason).toContain('不可用')
     })
+  })
+})
+
+describe('slotAvailableAt', () => {
+  const now = 10000
+  const rec = (five: number | null, resets: number) => ({
+    ts: now - 10,
+    five_hour: five === null ? null : { used_percentage: five, resets_at: resets },
+    seven_day: null
+  })
+  it('只有 exhausted_until', () => {
+    expect(slotAvailableAt({ id: 's', saved_at: 1, exhausted_until: now + 500 }, null, now, 95)).toBe(now + 500)
+  })
+  it('只有 API 超過門檻的視窗', () => {
+    expect(slotAvailableAt({ id: 's', saved_at: 1 }, rec(97, now + 800), now, 95)).toBe(now + 800)
+    expect(slotAvailableAt({ id: 's', saved_at: 1 }, rec(50, now + 800), now, 95)).toBe(now)
+  })
+  it('兩者取較晚者', () => {
+    const slot = { id: 's', saved_at: 1, exhausted_until: now + 500 }
+    expect(slotAvailableAt(slot, rec(97, now + 800), now, 95)).toBe(now + 800)
+    expect(slotAvailableAt({ ...slot, exhausted_until: now + 900 }, rec(97, now + 800), now, 95)).toBe(now + 900)
+  })
+  it('都沒有回 now', () => {
+    expect(slotAvailableAt({ id: 's', saved_at: 1 }, null, now, 95)).toBe(now)
+    expect(slotAvailableAt({ id: 's', saved_at: 1, exhausted_until: now - 5 }, rec(null, 0), now, 95)).toBe(now)
   })
 })

@@ -6,6 +6,7 @@ import {
   agyExhaustedFile,
   agyLockFile,
   agyQuotaDir,
+  configFile,
   agySlotsDir,
   dispatchDir,
   dispatchRunningDir,
@@ -576,6 +577,41 @@ describe('switcher-run.cjs', () => {
     expect(calls()).toHaveLength(1)
     expect(fs.existsSync(agyLockFile())).toBe(false)
   }, 20000)
+
+  it('routing_enabled 為 false：直接 delegate 第一個 Claude 項目，不執行 agy', async () => {
+    addSlot('aaaaaa', 'a@x.com')
+    setActive('a@x.com')
+    writeJsonAtomic(configFile(), { routing_enabled: false })
+    writeJsonAtomic(routingFile(), {
+      version: 1,
+      roles: {
+        implement: [
+          { provider: 'agy', model: MODEL },
+          { provider: 'claude', model: 'haiku' },
+          { provider: 'claude', model: 'opus' }
+        ]
+      }
+    })
+    const r = await run([], { FAKE_AGY_MODE: 'ok' })
+    expect(r.code).toBe(10)
+    expect(r.result.status).toBe('delegate')
+    expect(r.result.provider).toBe('claude')
+    expect(r.result.model).toBe('haiku')
+    expect(r.result.attempts).toEqual([])
+    expect(calls()).toHaveLength(0)
+  })
+
+  it('routing_enabled 為 false 且清單沒有 Claude 項目：model 用 sonnet', async () => {
+    writeJsonAtomic(configFile(), { routing_enabled: false })
+    writeJsonAtomic(routingFile(), {
+      version: 1,
+      roles: { implement: [{ provider: 'agy', model: MODEL }] }
+    })
+    const r = await run([], { FAKE_AGY_MODE: 'ok' })
+    expect(r.code).toBe(10)
+    expect(r.result.model).toBe('sonnet')
+    expect(calls()).toHaveLength(0)
+  })
 
   it('dispatch 只保留最近 200 筆', async () => {
     addSlot('aaaaaa', 'a@x.com')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { earliestReset, pickNext } from '../src/core/switchplan'
+import { earliestReset, pickEarliest, pickNext } from '../src/core/switchplan'
 
 const S = (id: string, until = 0) => ({ id, exhausted_until: until })
 
@@ -38,5 +38,28 @@ describe('earliestReset', () => {
   })
   it('none', () => {
     expect(earliestReset([S('a'), S('b', 50)], 100)).toBeNull()
+  })
+})
+
+describe('pickEarliest', () => {
+  const at = (m: Record<string, number>) => (s: { id: string }) => m[s.id]
+  it('取最早可用者', () => {
+    const slots = [S('a'), S('b'), S('c')]
+    expect(pickEarliest(slots, 100, at({ a: 900, b: 300, c: 500 }), () => false)).toEqual({
+      slot: slots[1],
+      at: 300
+    })
+  })
+  it('跳過被排除者', () => {
+    const slots = [S('a'), S('b')]
+    expect(pickEarliest(slots, 100, at({ a: 900, b: 300 }), (s) => s.id === 'b')!.slot.id).toBe('a')
+  })
+  it('同時間依清單順序', () => {
+    const slots = [S('a'), S('b')]
+    expect(pickEarliest(slots, 100, at({ a: 300, b: 300 }), () => false)!.slot.id).toBe('a')
+  })
+  it('全部排除回 null', () => {
+    expect(pickEarliest([S('a')], 100, () => 300, () => true)).toBeNull()
+    expect(pickEarliest([], 100, () => 300, () => false)).toBeNull()
   })
 })

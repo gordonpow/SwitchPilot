@@ -526,6 +526,20 @@ async function handleAgyEntry(
 
 async function dispatch(args: Args): Promise<Result> {
   const routing = loadRouting()
+  const cfg = config.load()
+  if (cfg.routing_enabled === false) {
+    const roleEntries = routing.roles[args.role] ?? []
+    const firstClaude = roleEntries.find((e) => e.provider === 'claude')
+    const model = firstClaude?.model ?? 'sonnet'
+    return {
+      status: 'delegate',
+      provider: 'claude',
+      model,
+      attempts: [],
+      message: 'model routing is disabled in Claude Account Switcher; use a Claude subagent'
+    }
+  }
+
   const attempts: Attempt[] = []
   for (const entry of routing.roles[args.role]) {
     if (entry.provider === 'claude') {

@@ -168,6 +168,7 @@ function initial(): AppState {
     pending: false,
     usagePolling: false,
     lastPollAt: t - 60,
+    resumeAt: null,
     earliestReset: null,
     config: {
       threshold: 95,
@@ -178,6 +179,7 @@ function initial(): AppState {
       manage_external: true,
       continue_prompt: '繼續',
       switch_mode: 'live',
+      switch_to_earliest: true,
       auto_compact: {
         enabled: false,
         threshold_type: 'percent',
@@ -189,9 +191,39 @@ function initial(): AppState {
       },
       close_to_tray: false,
       launch_at_login: false,
-      language: 'auto'
+      language: 'auto',
+      routing_enabled: true,
+      update_check: true,
+      update_include_prerelease: true
     },
     integration: { installed: true, needsUpdate: false, nodeFound: true },
+    routingSetup: {
+      nodeFound: true,
+      dispatcherInstalled: true,
+      agyInstalled: true,
+      agyAccounts: 2,
+      skill: 'installed',
+      skillPath: 'C:\\Users\\user\\.claude\\skills\\model-routing\\SKILL.md'
+    },
+    update: {
+      current: '0.4.0',
+      latest: {
+        version: '0.5.0',
+        tag: 'v0.5.0',
+        htmlUrl: 'https://github.com/gordonpow/Switching_account/releases/tag/v0.5.0',
+        notes: '- 新增自動檢查更新\n- 修正若干問題',
+        publishedAt: '2026-11-15T08:00:00Z',
+        assetName: 'Claude-Account-Switcher-0.5.0.exe',
+        size: 84_000_000,
+        hasHash: true
+      },
+      available: true,
+      checking: false,
+      checkedAt: t - 120,
+      error: null,
+      download: { state: 'idle', received: 0, total: 0, error: null },
+      canApply: true
+    },
     clis: [
       { pid: 4242, cwd: 'C:\\presonal_project\\Switching_account', sessionId: 'a', slotName: '工作帳號', turn: 'busy', hosted: true, method: 'runner', willPrompt: false, contextPct: 42 },
       { pid: 5120, cwd: 'C:\\work\\demo', sessionId: 'b', slotName: '工作帳號', turn: 'idle', hosted: false, method: 'inject', willPrompt: false, contextPct: 71 },
@@ -313,6 +345,17 @@ export function installMockApi(): void {
       push({ integration: { ...state.integration, installed: false } })
       return ok
     },
+    checkRoutingSetup: async () => {
+      return ok
+    },
+    installSkill: async () => {
+      push({ routingSetup: { ...state.routingSetup, skill: 'installed' } })
+      return done('已安裝 model-routing skill')
+    },
+    uninstallSkill: async () => {
+      push({ routingSetup: { ...state.routingSetup, skill: 'missing' } })
+      return done('已移除 model-routing skill')
+    },
     agySaveCurrent: (name) => done(`已儲存 agy 帳號「${name}」`),
     agySwitch: async (id) => {
       push({ agyAccounts: state.agyAccounts.map((a) => ({ ...a, active: a.id === id })) })
@@ -357,7 +400,23 @@ export function installMockApi(): void {
     setRouting: async (r) => {
       push({ routing: r })
       return ok
-    }
+    },
+    checkUpdate: async () => {
+      push({ update: { ...state.update, checking: true } })
+      setTimeout(() => push({ update: { ...state.update, checking: false, checkedAt: now() } }), 600)
+      return ok
+    },
+    downloadUpdate: async () => {
+      const total = 84_000_000
+      for (let i = 1; i <= 5; i++) {
+        push({ update: { ...state.update, download: { state: 'downloading', received: (total / 5) * i, total, error: null } } })
+        await new Promise((r) => setTimeout(r, 300))
+      }
+      push({ update: { ...state.update, download: { state: 'ready', received: total, total, error: null } } })
+      return ok
+    },
+    applyUpdate: () => done('準備更新'),
+    openReleasePage: async () => ok
   }
   window.api = api
 }

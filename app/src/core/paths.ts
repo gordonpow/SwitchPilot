@@ -49,6 +49,9 @@ export const loginDir = (): string => path.join(appDir(), 'login')
 /** 各帳號 API 用量快取。 */
 export const usageApiDir = (): string => path.join(appDir(), 'usage_api')
 
+/** 自動更新下載暫存與日誌目錄。 */
+export const updatesDir = (): string => path.join(appDir(), 'updates')
+
 // ---- agy（Antigravity）帳號與派工 ----
 
 export const agyDir = (): string => path.join(appDir(), 'agy')

@@ -51,10 +51,14 @@ export interface AppConfig {
   manage_external: boolean // 切換時一併處理外部 claude CLI
   continue_prompt: string // 中斷後自動送出的提示；空字串 = 不送
   switch_mode: 'live' | 'restart' // live：不重啟；restart：結束並以 --resume 重開
+  switch_to_earliest: boolean // 全部用完時換到最早重置的帳號（預設開啟）
   auto_compact: AutoCompactConfig
   close_to_tray: boolean // 按 X 時縮到系統匣
   launch_at_login: boolean // 開機自動啟動（以 --hidden 在背景啟動）
   language: LangSetting // 介面語言；auto = 依系統語言
+  routing_enabled: boolean // 模型分工功能開關（預設開啟）
+  update_check: boolean // 自動檢查更新（預設開啟）
+  update_include_prerelease: boolean // 更新時包含預覽版（預設開啟）
 }
 
 /** 自動整理上下文設定（與 core/config 的 AutoCompact 同形）。 */
@@ -163,6 +167,45 @@ export interface DispatchRecentView {
   message: string
 }
 
+export type SkillStatus = 'unavailable' | 'missing' | 'installed' | 'outdated'
+
+export interface RoutingSetupState {
+  nodeFound: boolean
+  dispatcherInstalled: boolean
+  agyInstalled: boolean
+  agyAccounts: number
+  skill: SkillStatus
+  skillPath: string
+}
+
+/** 自動更新狀態（畫面用）。 */
+export interface UpdateView {
+  current: string
+  latest: {
+    version: string
+    tag: string
+    htmlUrl: string
+    notes: string
+    publishedAt: string
+    assetName: string
+    size: number
+    /** release 有提供 SHA-256（false 時只驗證大小） */
+    hasHash: boolean
+  } | null
+  available: boolean
+  checking: boolean
+  checkedAt: number | null // unix 秒
+  error: string | null
+  download: {
+    state: 'idle' | 'downloading' | 'ready' | 'error'
+    received: number
+    total: number
+    error: string | null
+  }
+  /** 是 portable 執行檔，可自動替換 */
+  canApply: boolean
+}
+
 export interface AppState {
   /** 實際使用的介面語言（auto 已解析） */
   language: Lang
@@ -173,9 +216,12 @@ export interface AppState {
   pending: boolean // 已達門檻、等待回合結束
   usagePolling: boolean
   lastPollAt: number | null // unix 秒
+  resumeAt: number | null // 已安排自動繼續的時間（unix 秒）；沒有則 null
   earliestReset: number | null // 所有帳號都用完時的最早重置時間（unix 秒），否則 null
   config: AppConfig
   integration: { installed: boolean; needsUpdate: boolean; nodeFound: boolean }
+  routingSetup: RoutingSetupState
+  update: UpdateView
   clis: CliView[]
   clisScannedAt: number | null // unix 秒
   login: LoginView
@@ -196,7 +242,15 @@ export interface AppState {
   }
 }
 
-export type ErrorCode = 'NODE_MISSING' | 'CLAUDE_MISSING' | 'IN_USE' | 'BUSY' | 'INVALID' | 'UNKNOWN'
+export type ErrorCode =
+  | 'NODE_MISSING'
+  | 'CLAUDE_MISSING'
+  | 'IN_USE'
+  | 'BUSY'
+  | 'INVALID'
+  | 'UNKNOWN'
+  | 'UNAVAILABLE'
+  | 'EXISTS'
 export type Result = { ok: true } | { ok: false; error: string; code: ErrorCode }
 
 export interface Api {
@@ -218,6 +272,9 @@ export interface Api {
   setConfig(patch: AppConfigPatch): Promise<Result>
   installIntegration(): Promise<Result>
   uninstallIntegration(): Promise<Result>
+  checkRoutingSetup(): Promise<Result>
+  installSkill(overwrite: boolean): Promise<Result>
+  uninstallSkill(): Promise<Result>
   agySaveCurrent(name: string): Promise<Result>
   agySwitch(id: string): Promise<Result>
   agyRename(id: string, name: string): Promise<Result>
@@ -228,6 +285,12 @@ export interface Api {
   agyFinishLogin(): Promise<Result>
   agyRefreshQuota(): Promise<Result>
   setRouting(r: Routing): Promise<Result>
+  checkUpdate(): Promise<Result>
+  /** 下載完成（或失敗）才回傳；進度由 state.update.download 推送 */
+  downloadUpdate(): Promise<Result>
+  applyUpdate(): Promise<Result>
+  /** 只開最新 release 的頁面 */
+  openReleasePage(): Promise<Result>
 }
 
 /** IPC channel 名稱（preload 與 main 共用）。 */
@@ -249,6 +312,9 @@ export const IPC = {
   setConfig: 'config:set',
   installIntegration: 'integration:install',
   uninstallIntegration: 'integration:uninstall',
+  routingSetupCheck: 'routingSetup:check',
+  installSkill: 'routingSetup:install',
+  uninstallSkill: 'routingSetup:uninstall',
   agySaveCurrent: 'agy:saveCurrent',
   agySwitch: 'agy:switch',
   agyRename: 'agy:rename',
@@ -257,7 +323,11 @@ export const IPC = {
   agyCancelLogin: 'agy:cancelLogin',
   agyFinishLogin: 'agy:finishLogin',
   agyRefreshQuota: 'agy:refreshQuota',
-  setRouting: 'routing:set'
+  setRouting: 'routing:set',
+  checkUpdate: 'update:check',
+  downloadUpdate: 'update:download',
+  applyUpdate: 'update:apply',
+  openReleasePage: 'update:openRelease'
 } as const
 
 declare global {

@@ -12,6 +12,7 @@ import {
   Notification
 } from 'electron'
 import { join } from 'path'
+import { spawn } from 'node:child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { Controller } from './controller'
@@ -176,6 +177,23 @@ function setupController(): Controller {
         console.error('更新系統匣失敗：' + (e instanceof Error ? e.message : String(e)))
       }
     },
+    updateFetch: ((input, init) => net.fetch(input as string, init as RequestInit)) as typeof fetch,
+    appVersion: app.getVersion(),
+    portableExe: process.env['PORTABLE_EXECUTABLE_FILE'] || null,
+    openExternal: (url) => void shell.openExternal(url),
+    quitApp: () => {
+      quitting = true
+      app.quit()
+    },
+    spawnDetached: (file, args) =>
+      new Promise<boolean>((resolve, reject) => {
+        const child = spawn(file, args, { detached: true, stdio: 'ignore', windowsHide: true })
+        child.once('error', (e) => reject(e))
+        child.once('spawn', () => {
+          child.unref()
+          resolve(true)
+        })
+      }),
     notify: (title, body) => showNotice(title, body),
     applyLoginItem,
     copyText: (text) => clipboard.writeText(text)
@@ -205,6 +223,9 @@ function setupController(): Controller {
   ipcMain.handle(IPC.setConfig, (_e, patch) => c.setConfig(patch))
   ipcMain.handle(IPC.installIntegration, () => c.installIntegration())
   ipcMain.handle(IPC.uninstallIntegration, () => c.uninstallIntegration())
+  ipcMain.handle(IPC.routingSetupCheck, () => c.checkRoutingSetup())
+  ipcMain.handle(IPC.installSkill, (_e, overwrite: boolean) => c.installSkill(overwrite))
+  ipcMain.handle(IPC.uninstallSkill, () => c.uninstallSkill())
   ipcMain.handle(IPC.agySaveCurrent, (_e, name: string) => c.agySaveCurrent(name))
   ipcMain.handle(IPC.agySwitch, (_e, id: string) => c.agySwitch(id))
   ipcMain.handle(IPC.agyRename, (_e, id: string, name: string) => c.agyRename(id, name))
@@ -214,6 +235,10 @@ function setupController(): Controller {
   ipcMain.handle(IPC.agyFinishLogin, () => c.agyFinishLogin())
   ipcMain.handle(IPC.agyRefreshQuota, () => c.agyRefreshQuota())
   ipcMain.handle(IPC.setRouting, (_e, r) => c.setRouting(r))
+  ipcMain.handle(IPC.checkUpdate, () => c.checkUpdate())
+  ipcMain.handle(IPC.downloadUpdate, () => c.downloadUpdate())
+  ipcMain.handle(IPC.applyUpdate, () => c.applyUpdate())
+  ipcMain.handle(IPC.openReleasePage, () => c.openReleasePage())
   return c
 }
 
@@ -314,7 +339,9 @@ app.on('second-instance', (_e, argv) => {
 if (gotLock)
   app.whenReady().then(() => {
     // Set app user model id for windows
-    electronApp.setAppUserModelId('local.claude-switcher')
+    // Windows 不設定 AppUserModelID：portable 版沒有對應的開始功能表捷徑，
+    // 設了之後工作列找不到圖示而顯示白紙（2026-11-15 實測；不設時通知仍正常）
+    if (process.platform !== 'win32') electronApp.setAppUserModelId('local.claude-switcher')
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.

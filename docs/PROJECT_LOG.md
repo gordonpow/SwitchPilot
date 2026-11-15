@@ -81,3 +81,8 @@
   - 多國語言（`docs/work/i18n/`）：繁中＋英文，`auto` 依系統語言（zh-TW／HK／MO／Hant 為繁中，其他英文），設定「一般」頁可指定。規格審查 9 條全採用；T-1 agy Flash 無產出改 Sonnet、T-2 agy Flash（主導者修 2 個問題）、T-3 Sonnet；實作審查（兩位 Sonnet）採用 6 條。464 個測試通過、英文截圖確認。portable exe 重建。
 - 使用者確認模型分工需要 skill 才會被 Claude Code 使用 → 新增 `skills/model-routing/SKILL.md`（英文，從 dev-workflow 派工段落整理：讀 routing.json、呼叫 switcher-run、exit code、agy 提示規則、失敗處理），README 說明安裝方式。commit `27b0ff8`、`d67d0e7` 並推送。
 - 使用者要求發布 exe → 建立 GitHub Release `v1.0.0`（pre-release），上傳 portable exe，release notes 英文＋繁中（含未簽章 SmartScreen 說明、SHA-256、條款提醒）。
+- 使用者回報工作列圖示仍是白紙 → 先試 `setAppDetails`（指定圖示與重新啟動指令）無效；對照實驗（win-unpacked、假資料、截工作列）：設定 AppUserModelID 時白紙、不設定時正確顯示新圖示；另以小腳本確認不設 AppUserModelID 時 Electron 通知仍正常 → Windows 不再設定 AppUserModelID，移除 `setAppDetails`。
+- 使用者要求：模型分工 skill 的逐步設定引導（App 內＋README）與功能開關（`docs/work/skill-setup/`）→ 規格審查 10 條採用；agy Flash 做一半後被拒，Sonnet 接手完成。設定「模型分工」頁：啟用開關、6 步設定引導卡片（Node、派工工具、agy、agy 帳號、安裝／更新／移除 skill、範例指令）；關閉時隱藏派工並詢問移除 skill；`switcher-run` 關閉時一律 delegate。487 個測試通過。
+- 使用者要求：每 10 分鐘檢查更新、紅點引導、自動下載並替換（`docs/work/auto-update/`）→ 規格審查 9 條採用；T-1A（updater、update.ps1）agy Flash、T-1B（controller、介面）Sonnet；實作審查無高、中 6 條＋低 2 條採用並由 Sonnet 修正。537 個測試通過。版本號提高到 1.1.0。
+- 使用者要求：兩個帳號都用完時換到最早重置的帳號（`docs/work/earliest-reset/`）→ Sonnet 實作；實作審查無高，採用 6 條（restart 模式維持原行為、等待期間只暫停 60 秒、失敗還原、resume 前確認可用並順延、只對 rate_limit 停下的 session 送提示、補測試），不採用 1 條（排程只在記憶體，列為已知限制）。設定「帳號切換」頁有開關（預設開）。557 個測試通過。
+- 重建 `Claude Account Switcher 1.1.0.exe`（18:02），以假資料啟動實際 portable exe 截工作列，確認顯示新圖示。尚未 commit、未發布。

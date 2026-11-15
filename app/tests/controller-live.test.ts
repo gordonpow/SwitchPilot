@@ -522,7 +522,7 @@ describe('Controller live 模式', () => {
     const { a, b } = slots()
     world(threeClis)
     const notify = vi.fn()
-    const ctl = make({}, { notify })
+    const ctl = make({ switch_to_earliest: false }, { notify })
     await ctl.tick()
     accounts.markExhausted(b.id, nowS() + 7200)
     const warnCount = (): number =>

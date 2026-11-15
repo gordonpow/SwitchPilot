@@ -65,6 +65,32 @@ export function slotBlocked(
 }
 
 /**
+ * 單一 slot 最早可用的時間（unix 秒）：exhausted_until 與「超過門檻且尚未重置」的 API 視窗 resets_at 取較晚者。
+ * 判斷條件與 slotBlocked 一致；沒有任何限制時回傳 nowSec。
+ */
+export function slotAvailableAt(
+  slot: SlotLike,
+  rec: UsageApiRecordLike | null | undefined,
+  nowSec: number,
+  threshold: number,
+  maxAgeSec: number = DEFAULT_API_BLOCK_WINDOW_S
+): number {
+  let at = nowSec
+  if ((slot.exhausted_until || 0) > at) at = slot.exhausted_until as number
+  if (rec && typeof rec.ts === 'number' && nowSec - rec.ts <= maxAgeSec) {
+    for (const w of [rec.five_hour, rec.seven_day]) {
+      if (!w) continue
+      const used = typeof w.used_percentage === 'number' ? w.used_percentage : null
+      const resetsAt = typeof w.resets_at === 'number' ? w.resets_at : 0
+      if (used !== null && Number.isFinite(used) && used >= threshold && resetsAt > at) {
+        at = resetsAt
+      }
+    }
+  }
+  return at
+}
+
+/**
  * 檢查是否還有可用的 Claude 帳號（AC-13'）。
  * 讀取 accounts.listSlots() 與 usage_api/<id>.json。
  * 沒有任何 Claude slot 時視為可用。

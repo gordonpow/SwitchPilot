@@ -35,3 +35,22 @@ export function earliestReset(slots: PlanSlot[], now: number): number | null {
   const vals = slots.map((s) => s.exhausted_until || 0).filter((v) => v > now)
   return vals.length ? Math.min(...vals) : null
 }
+
+/**
+ * 全部不可用時挑「最早可用」的 slot：回傳 availableAt 最小者（同時間依清單順序）。
+ * isExcluded 為 true 的跳過；回傳的 at 不早於 now。全部被排除時回傳 null。
+ */
+export function pickEarliest<T>(
+  slots: T[],
+  now: number,
+  availableAt: (s: T) => number,
+  isExcluded: (s: T) => boolean
+): { slot: T; at: number } | null {
+  let best: { slot: T; at: number } | null = null
+  for (const s of slots) {
+    if (isExcluded(s)) continue
+    const at = Math.max(availableAt(s), now)
+    if (!best || at < best.at) best = { slot: s, at }
+  }
+  return best
+}

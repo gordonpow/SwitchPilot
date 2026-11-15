@@ -1,6 +1,7 @@
 // 主程序控制器：輪詢、切換流程、登入流程、狀態推送。
 // 移植自 Python gui.py 的非 UI 邏輯。不 import electron：Notification、clipboard 等由外部注入。
 // 任何事件、log、錯誤訊息都不得包含 token。
+import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { execFile, spawn } from 'node:child_process'
@@ -10,6 +11,7 @@ import * as agyacc from '../core/agyaccounts'
 import { fetchAgyQuota, readAgyQuota, writeAgyQuota, type FetchLike } from '../core/agyquota'
 import { acquireFileLock, type FileLock } from '../core/filelock'
 import * as routingMod from '../core/routing'
+import * as skillsetup from '../core/skillsetup'
 import * as config from '../core/config'
 import * as integration from '../core/integration'
 import * as launcherMod from '../core/launcher'
@@ -17,7 +19,7 @@ import { withSlotLock } from '../core/lock'
 import * as login from '../core/login'
 import { Monitor, type EventRecord, type UsageRecord } from '../core/monitor'
 import * as nodebin from '../core/nodebin'
-import { slotBlocked } from '../core/claudeavail'
+import { slotAvailableAt, slotBlocked } from '../core/claudeavail'
 import { needsRelogin, readUsageApi, UsagePoller, type FetchImpl, type UsageApiRecord } from '../core/oauth'
 import * as paths from '../core/paths'
 import { pidAlive, killTree, whichFirst } from '../core/procutil'
@@ -26,6 +28,7 @@ import { injectCtrlKey, injectLine, injectSubmit } from '../core/coninject'
 import * as storage from '../core/storage'
 import * as switchplan from '../core/switchplan'
 import * as usage from '../core/usage'
+import * as updater from '../core/updater'
 import * as dispatchlog from '../core/dispatchlog'
 import {
   getLanguage,
@@ -38,6 +41,8 @@ import type {
   AgyAccountView,
   AgyLoginView,
   Routing,
+  RoutingSetupState,
+  UpdateView,
   AppConfigPatch,
   AppState,
   CliView,
@@ -79,6 +84,13 @@ const AGY_LOCK_STALE_MS = 70 * 60 * 1000
 const AGY_TOKEN_MARGIN_MS = 60_000
 const AGY_DEFAULT_VERSION = '1.5.8'
 const agyBusyMsg = (): string => t('agy.busyDispatch')
+/** 更新檢查：啟動後第一次、之後的間隔 */
+const UPDATE_FIRST_MS = 30_000
+const UPDATE_EVERY_MS = 600_000
+/** 下載進度最多每隔這麼久推送一次 */
+const UPDATE_PROGRESS_MS = 500
+/** checkForUpdate 回傳的 release（型別由 updater 推導）。 */
+type UpdateRelease = NonNullable<Awaited<ReturnType<typeof updater.checkForUpdate>>['latest']>
 const SAFE_SESSION_RE = /^[0-9A-Za-z-]{1,64}$/
 
 /** 每個 session 的 turn 相關事件時間（unix 秒）；自動整理用。 */
@@ -273,6 +285,22 @@ export interface ControllerDeps {
   launchAgyLogin?: () => void
   /** 套用「開機自動啟動」（main 注入 setLoginItemSettings）；丟例外表示失敗。 */
   applyLoginItem?: (enabled: boolean) => void
+  /** 尋找 agy 執行檔（測試可注入）。 */
+  findAgy?: () => string | null
+  /** 讀取內附的 model-routing skill 檔案內容（測試可注入）。 */
+  readBundledSkill?: () => string | null
+  /** 檢查／下載更新用的 fetch（main 傳入 net.fetch）；沒有就不檢查更新。 */
+  updateFetch?: typeof fetch
+  /** 目前版本（main 傳入 app.getVersion()）。 */
+  appVersion?: string
+  /** portable exe 路徑（PORTABLE_EXECUTABLE_FILE）；沒有就不提供自動替換。 */
+  portableExe?: string | null
+  /** 啟動脫離父程序的程式（更新腳本）。 */
+  spawnDetached?: (file: string, args: string[]) => Promise<boolean> | boolean | void
+  /** 結束本程式。 */
+  quitApp?: () => void
+  /** 用預設瀏覽器開啟網址。 */
+  openExternal?: (url: string) => void
 }
 
 class ControllerError extends Error {
@@ -341,6 +369,9 @@ export class Controller {
   private agyVersionCache: string | null = null
   private agyFetchImpl: FetchLike | undefined
   private launchAgyLoginFn: () => void
+  private findAgyFn: () => string | null
+  private readBundledSkillFn: () => string | null
+  private routingSetupCache: Omit<RoutingSetupState, 'agyAccounts'> | null = null
   private agyCur: { email: string | null; slotId: string | null; expiryMs: number | null } | null =
     null
   private agyQuerying = false
@@ -367,6 +398,8 @@ export class Controller {
   private foreignLogged = false
   /** unix 秒：此時間前不再嘗試自動切換（上次找不到目標） */
   private noTargetUntil = 0
+  /** 繼續提示因目前帳號仍被擋而順延時只記一次 log */
+  private resumeDeferLogged = false
   private warnedMismatch = false
   private lastCleanup = 0
   private lastPollAt: number | null = null
@@ -384,6 +417,8 @@ export class Controller {
   private lastScan: sessions.DetectedCli[] = []
   /** 不重啟模式切換後 30 秒內的接續狀態；done 為本次切換已送過提示的 session */
   private liveContinue: { until: number; done: Set<string> } | null = null
+  /** 全部用完後安排的「繼續」時間（unix 秒，= 最早可用時間 + 60）；null 表示沒有安排 */
+  private resumeAt: number | null = null
   private scanTimer: NodeJS.Timeout | null = null
   private disposed = false
 
@@ -404,6 +439,24 @@ export class Controller {
   } | null = null
 
   private applyLoginItemFn: ((enabled: boolean) => void) | undefined
+
+  // ---- 自動更新 ----
+  private updateFetch: typeof fetch | null
+  private appVersion: string
+  private portableExe: string | null
+  private spawnDetachedFn: ((file: string, args: string[]) => Promise<boolean> | boolean | void) | null
+  private quitAppFn: (() => void) | null
+  private openExternalFn: ((url: string) => void) | null
+  private updateTimer: NodeJS.Timeout | null = null
+  private updateLatest: UpdateRelease | null = null
+  private updateAvailable = false
+  private updateChecking = false
+  private updateCheckedAt: number | null = null
+  private updateError: string | null = null
+  private updateDl: UpdateView['download'] = { state: 'idle', received: 0, total: 0, error: null }
+  private updateFile: string | null = null
+  private updateRestoreTried = false
+  private updateLastProgressMs = 0
 
   constructor(deps: ControllerDeps = {}) {
     this.now = deps.now ?? Date.now
@@ -444,7 +497,29 @@ export class Controller {
     this.agyVersionFn = deps.agyVersion ?? defaultAgyVersion
     this.agyFetchImpl = deps.agyFetch ?? deps.fetchImpl
     this.launchAgyLoginFn = deps.launchAgyLogin ?? defaultLaunchAgyLogin
+    this.findAgyFn = deps.findAgy ?? (() => whichFirst(['agy.exe']))
+    this.readBundledSkillFn =
+      deps.readBundledSkill ??
+      (() => {
+        try {
+          const p = path.join(
+            nodebin.scriptsSourceDir(this.scriptsDir),
+            'skills',
+            'model-routing',
+            'SKILL.md'
+          )
+          return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : null
+        } catch {
+          return null
+        }
+      })
     this.applyLoginItemFn = deps.applyLoginItem
+    this.updateFetch = deps.updateFetch ?? null
+    this.appVersion = deps.appVersion ?? '0.0.0'
+    this.portableExe = deps.portableExe || null
+    this.spawnDetachedFn = deps.spawnDetached ?? null
+    this.quitAppFn = deps.quitApp ?? null
+    this.openExternalFn = deps.openExternal ?? null
     this.watermark = usage.readNewEvents(null).last
     this.ingestTurns(usage.allEvents())
   }
@@ -512,6 +587,9 @@ export class Controller {
       this.log('warn', t('log.loginItemApplyFailed', { error: errMsg(e) }))
     }
     this.log('info', t('log.started', { count: accounts.listSlots().length }))
+    this.refreshRoutingSetupCache()
+    this.cleanupUpdates(null)
+    this.scheduleUpdateCheck(UPDATE_FIRST_MS)
     this.scheduleTick(0)
     if (!this.pollDisabled) this.schedulePoll(1000)
     if (this.scanEnabled) this.scheduleScan(1000)
@@ -530,12 +608,13 @@ export class Controller {
       this.loginTimer,
       this.scanTimer,
       this.agyPollTimer,
-      this.agyLoginTimer
+      this.agyLoginTimer,
+      this.updateTimer
     ]) {
       if (t) clearTimeout(t)
     }
     this.tickTimer = this.pollTimer = this.pushTimer = this.loginTimer = this.scanTimer = null
-    this.agyPollTimer = this.agyLoginTimer = null
+    this.agyPollTimer = this.agyLoginTimer = this.updateTimer = null
     // 關閉程式時釋放登入流程持有的鎖（backup 檔保留，下次啟動會還原）
     this.agyLoginCtx?.lock.release()
     this.agyLoginCtx = null
@@ -847,14 +926,16 @@ export class Controller {
   }
 
   /** 切換當下是否會對這個 claude 送出繼續提示（只限 live 模式）。 */
-  private promptEligible(c: sessions.DetectedCli): boolean {
+  private promptEligible(c: sessions.DetectedCli, maxAgeS: number = INTERRUPT_MAX_AGE_S): boolean {
     if (this.cfg.switch_mode !== 'live') return false
     if (!String(this.cfg.continue_prompt ?? '')) return false
     if (!c.sessionId || !c.interactive || c.turn !== 'interrupted') return false
     if (!c.hosted && !this.cfg.manage_external) return false
     const t = this.turns.get(c.sessionId)
     if (!t || t.kind !== 'stopfailure') return false
-    if (this.nowSec() - t.ts > INTERRUPT_MAX_AGE_S) return false
+    if (this.nowSec() - t.ts > maxAgeS) return false
+    // 不限時間（resume）時只接受明確的 rate_limit，避免對很久以前的其他失敗送提示
+    if (!Number.isFinite(maxAgeS) && t.error !== 'rate_limit') return false
     return !t.error || t.error === 'rate_limit'
   }
 
@@ -963,6 +1044,7 @@ export class Controller {
     const r = usage.readNewEvents(this.watermark)
     this.watermark = r.last
     this.ingestTurns(r.events as unknown as ReadonlyArray<{ [k: string]: unknown }>)
+    await this.handleResume(nowSec)
     await this.handleLiveFailures(nowSec, r.events as unknown as EventRecord[])
     await this.maybeCompact(nowSec)
     await this.processPendingClear(nowSec)
@@ -996,6 +1078,42 @@ export class Controller {
         auto: true,
         restartRuns: true
       })
+    }
+  }
+
+  /** 全部用完後安排的時間到了：開啟接續視窗，對因額度停下的 session 送「繼續」（與一般切換後相同路徑）。 */
+  private async handleResume(nowSec: number): Promise<void> {
+    if (this.resumeAt === null || nowSec < this.resumeAt) return
+    this.resumeAt = null
+    if (this.cfg.switch_mode !== 'live') return
+    // 目前帳號仍被擋（例如重置時間變動）就順延，不送提示
+    try {
+      const cur = accounts.currentSlotId()
+      const slot = cur ? accounts.getSlot(cur) : null
+      if (slot) {
+        const thr = Number(this.cfg.threshold) || 95
+        const rec = readUsageApi(slot.id)
+        if (slotBlocked(slot, rec, nowSec, thr, API_BLOCK_WINDOW_S)) {
+          const at = slotAvailableAt(slot, rec, nowSec, thr, API_BLOCK_WINDOW_S)
+          this.resumeAt = Math.max(at, nowSec) + 60
+          if (!this.resumeDeferLogged) {
+            this.resumeDeferLogged = true
+            this.log('info', t('log.resumeDeferred', { time: fmtTs(at) }))
+          }
+          return
+        }
+      }
+    } catch {
+      /* 讀不到就照常繼續 */
+    }
+    this.resumeDeferLogged = false
+    this.monitor.ignoreFailuresUntil = nowSec + LIVE_WINDOW_S
+    this.liveContinue = { until: nowSec + LIVE_WINDOW_S, done: new Set() }
+    this.log('info', t('log.resumeAfterReset'))
+    const scan = this.scanEnabled ? await this.scanNow() : []
+    for (const c of scan) {
+      // 停下的時間可能長達數小時，不套用一般的 15 分鐘上限
+      if (this.promptEligible(c, Infinity)) await this.continueSession(c)
     }
   }
 
@@ -1153,6 +1271,7 @@ export class Controller {
       }
       this.noTargetUntil = 0
       this.warnedExhaust = false
+      this.resumeAt = null
       this.log('info', t('log.exhaustedCleared'))
       this.requestPush()
       return ok
@@ -1189,6 +1308,71 @@ export class Controller {
         this.log('error', t('log.abortRestartFailed', { error: errMsg(e) }))
       }
     }
+  }
+
+  /**
+   * 全部不可用時改選最早可用的帳號（排除需重新登入與 token 失效者）。
+   * 回傳 Result 表示已處理完（已切換或換帳號失敗）；回傳 null 表示維持原本「全部用完」的處理
+   * （最早可用的就是目前帳號，或沒有可選）。兩種情況都會安排可用時間後的「繼續」。
+   * ensureFresh 不在 withSlotLock 內呼叫。
+   */
+  private async switchToEarliest(
+    slots: accounts.Slot[],
+    current: string | null,
+    failed: Set<string>,
+    nowSec: number
+  ): Promise<Result | null> {
+    const thr = Number(this.cfg.threshold) || 95
+    let pick: { slot: accounts.Slot; at: number } | null = null
+    for (let i = 0; i <= slots.length; i++) {
+      pick = switchplan.pickEarliest(
+        slots,
+        nowSec,
+        (s) => slotAvailableAt(s, readUsageApi(s.id), nowSec, thr, API_BLOCK_WINDOW_S),
+        (s) => failed.has(s.id) || needsRelogin(s)
+      )
+      if (!pick || pick.slot.id === current || !this.poller.ensureFresh) break
+      if ((await this.poller.ensureFresh(pick.slot.id)) !== 'dead') break
+      failed.add(pick.slot.id)
+      this.log('warn', t('log.tokenInvalidSkip', { name: this.slotName(pick.slot.id) }))
+      pick = null
+    }
+    if (!pick) return null
+    const at = pick.at
+    const prevNoTarget = this.noTargetUntil
+    const prevResumeAt = this.resumeAt
+    // 只暫停 60 秒：可用時間前若出現新的可用帳號，仍可正常切過去
+    this.noTargetUntil = Math.max(this.noTargetUntil, nowSec + NO_TARGET_PAUSE_S)
+    // 重複收到限流時不把已安排（或已順延）的時間往前改
+    this.resumeAt = Math.max(this.resumeAt ?? 0, at + 60)
+    if (pick.slot.id === current) return null
+    const tid = pick.slot.id
+    try {
+      await withSlotLock(tid, () =>
+        current ? withSlotLock(current, () => accounts.switchTo(tid)) : accounts.switchTo(tid)
+      )
+    } catch (e) {
+      this.noTargetUntil = prevNoTarget
+      this.resumeAt = prevResumeAt
+      this.log('error', t('log.switchAccountFailed', { error: errMsg(e) }))
+      return fail(
+        t('log.switchAccountFailed', { error: errMsg(e) }),
+        e instanceof accounts.AccountError ? 'INVALID' : 'UNKNOWN'
+      )
+    }
+    this.monitor.reset(this.nowSec())
+    this.pendingLogged = false
+    this.foreignLogged = false
+    const name = this.slotName(tid)
+    this.log('warn', t('log.switchedEarliest', { name, time: fmtTs(at) }))
+    if (!this.warnedExhaust) {
+      this.warnedExhaust = true
+      this.notify(
+        t('notify.switchedEarliestTitle'),
+        t('notify.switchedEarliestBody', { name, time: fmtTs(at) })
+      )
+    }
+    return ok
   }
 
   private async runSwitch(p: {
@@ -1228,8 +1412,13 @@ export class Controller {
           this.log('warn', t('log.tokenInvalidSkip', { name: this.slotName(nxt.id) }))
           nxt = null
         }
+        // restart 模式換憑證後沒有人接手處理，維持原「全部用完」行為
+        if (!nxt && this.cfg.switch_to_earliest && this.cfg.switch_mode === 'live') {
+          const r = await this.switchToEarliest(slots, current, failed, nowSec)
+          if (r) return r
+        }
         if (!nxt) {
-          this.noTargetUntil = nowSec + NO_TARGET_PAUSE_S
+          this.noTargetUntil = Math.max(this.resumeAt !== null ? this.noTargetUntil : 0, nowSec + NO_TARGET_PAUSE_S)
           if (!this.warnedExhaust) {
             this.warnedExhaust = true
             this.log('warn', t('log.allExhausted'))
@@ -1253,6 +1442,7 @@ export class Controller {
           return fail(t('err.needsRelogin'), 'INVALID')
         }
       }
+      if (!p.auto) this.resumeAt = null // 手動切換取消已安排的繼續
       const notifyAuto = (): void => {
         if (p.auto) {
           this.notify(
@@ -1286,6 +1476,7 @@ export class Controller {
         this.warnedExhaust = false
         this.foreignLogged = false
         this.noTargetUntil = 0
+        this.resumeAt = null
         this.log('info', t('log.switched', { from: this.slotName(current), to: this.slotName(tid), reason: p.reason }))
         notifyAuto()
         // 換帳號之後才掃描並送提示，掃描不會延遲換帳號
@@ -1374,6 +1565,7 @@ export class Controller {
       this.monitor.reset(this.nowSec())
       this.pendingLogged = false
       this.noTargetUntil = 0
+      this.resumeAt = null
       for (const ri of runInfo) {
         try {
           const sid = ri.cli?.sessionId
@@ -1567,6 +1759,11 @@ export class Controller {
       }
       if (patch.close_to_tray !== undefined) next.close_to_tray = !!patch.close_to_tray
       if (patch.launch_at_login !== undefined) next.launch_at_login = !!patch.launch_at_login
+      if (patch.routing_enabled !== undefined) next.routing_enabled = !!patch.routing_enabled
+      if (patch.switch_to_earliest !== undefined) next.switch_to_earliest = !!patch.switch_to_earliest
+      if (patch.update_check !== undefined) next.update_check = !!patch.update_check
+      if (patch.update_include_prerelease !== undefined)
+        next.update_include_prerelease = !!patch.update_include_prerelease
       let modeChanged = false
       if (patch.switch_mode !== undefined) {
         const m = config.validateSwitchMode(patch.switch_mode)
@@ -1606,6 +1803,7 @@ export class Controller {
       if (next.switch_mode === 'restart') {
         this.monitor.ignoreFailuresUntil = 0
         this.liveContinue = null
+        this.resumeAt = null
       }
       // 影響「會送出提示」的欄位有變：直接用上次掃描結果重算，不必重掃
       if (
@@ -1618,6 +1816,17 @@ export class Controller {
       }
       if (modeChanged && this.scanEnabled) void this.scanNow()
       this.monitor.threshold = Number(next.threshold) || 95
+      if (patch.update_check !== undefined) {
+        if (next.update_check) {
+          if (!this.updateTimer) this.scheduleUpdateCheck(1000)
+        } else if (this.updateTimer) {
+          clearTimeout(this.updateTimer)
+          this.updateTimer = null
+        }
+      }
+      if (patch.update_include_prerelease !== undefined && this.updateFetch) {
+        void this.checkUpdate()
+      }
       return ok
     })
   }
@@ -2002,6 +2211,7 @@ export class Controller {
   }
 
   private afterAgyChange(): void {
+    this.refreshRoutingSetupCache()
     void this.refreshAgyCurrent().then(() => {
       if (!this.pollDisabled) void this.agyPollOnce()
     })
@@ -2057,6 +2267,7 @@ export class Controller {
         /* 忽略 */
       }
       this.log('info', t('log.agyDeleted', { name: slot.name }))
+      this.refreshRoutingSetupCache()
       await this.refreshAgyCurrent()
       return ok
     })
@@ -2302,6 +2513,71 @@ export class Controller {
   }
 
   // ---------- 模型分工 ----------
+  private refreshRoutingSetupCache(): void {
+    const nodeFound = this.findNodeFn() !== null
+    const dispatcherInstalled = fs.existsSync(path.join(paths.binDir(), 'switcher-run.cjs'))
+    const agyInstalled = this.findAgyFn() !== null
+    const bundled = this.readBundledSkillFn()
+    const skill = skillsetup.skillStatus(bundled)
+    const skillPath = skillsetup.skillTargetPath()
+    this.routingSetupCache = {
+      nodeFound,
+      dispatcherInstalled,
+      agyInstalled,
+      skill,
+      skillPath
+    }
+  }
+
+  private getRoutingSetup(agyAccountsCount: number): RoutingSetupState {
+    if (!this.routingSetupCache) {
+      this.refreshRoutingSetupCache()
+    }
+    return {
+      ...this.routingSetupCache!,
+      agyAccounts: agyAccountsCount
+    }
+  }
+
+  checkRoutingSetup(): Promise<Result> {
+    return this.guard(() => {
+      this.nodeCache = null
+      try {
+        this.ensureScripts()
+      } catch (e) {
+        this.log('warn', t('log.scriptsInstallFailed', { error: errMsg(e) }))
+      }
+      this.refreshRoutingSetupCache()
+      this.requestPush()
+      return ok
+    })
+  }
+
+  installSkill(overwrite: boolean): Promise<Result> {
+    return this.guard(() => {
+      const bundled = this.readBundledSkillFn()
+      if (bundled === null) {
+        return fail(t('err.skillUnavailable'), 'UNAVAILABLE')
+      }
+      const res = skillsetup.installSkill(bundled, overwrite)
+      if (res === 'exists') {
+        return fail(t('err.skillExists'), 'EXISTS')
+      }
+      this.log('info', t('log.skillInstalled', { path: skillsetup.skillTargetPath() }))
+      this.refreshRoutingSetupCache()
+      return ok
+    })
+  }
+
+  uninstallSkill(): Promise<Result> {
+    return this.guard(() => {
+      skillsetup.uninstallSkill()
+      this.log('info', t('log.skillRemoved'))
+      this.refreshRoutingSetupCache()
+      return ok
+    })
+  }
+
   setRouting(r: Routing): Promise<Result> {
     return this.guard(() => {
       try {
@@ -2311,6 +2587,329 @@ export class Controller {
         throw e
       }
       this.log('info', t('log.routingSaved'))
+      return ok
+    })
+  }
+
+  // ---------- 自動更新 ----------
+  /** 是否該排程檢查：有注入 fetch、設定開啟、未停用輪詢、非截圖模式。 */
+  private canScheduleUpdate(): boolean {
+    return (
+      !this.disposed &&
+      !!this.updateFetch &&
+      !!this.cfg.update_check &&
+      !this.pollDisabled &&
+      !process.env.CLAUDE_SWITCHER_SCREENSHOT
+    )
+  }
+
+  private scheduleUpdateCheck(delay: number): void {
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer)
+      this.updateTimer = null
+    }
+    if (!this.canScheduleUpdate()) return
+    this.updateTimer = setTimeout(() => {
+      this.updateTimer = null
+      if (!this.canScheduleUpdate()) return
+      void this.checkUpdate().finally(() => this.scheduleUpdateCheck(UPDATE_EVERY_MS))
+    }, delay)
+  }
+
+  private buildUpdateView(): UpdateView {
+    const l = this.updateLatest
+    return {
+      current: this.appVersion,
+      latest: l
+        ? {
+            version: l.version,
+            tag: l.tag,
+            htmlUrl: l.htmlUrl,
+            notes: l.notes,
+            publishedAt: l.publishedAt,
+            assetName: l.asset.name,
+            size: l.asset.size,
+            hasHash: !!l.asset.sha256
+          }
+        : null,
+      available: this.updateAvailable,
+      checking: this.updateChecking,
+      checkedAt: this.updateCheckedAt,
+      error: this.updateError,
+      download: { ...this.updateDl },
+      canApply: !!this.portableExe
+    }
+  }
+
+  /** 清理 updates/：一律刪 *.part；keepName 不是 null 時，也刪不是它的 exe（R-5）。 */
+  private cleanupUpdates(keepName: string | null): void {
+    try {
+      const dir = paths.updatesDir()
+      for (const name of fs.readdirSync(dir)) {
+        const lower = name.toLowerCase()
+        const isPart = lower.endsWith('.part')
+        const isExe = lower.endsWith('.exe')
+        if (!isPart && !(isExe && keepName !== null && name !== keepName)) continue
+        try {
+          fs.rmSync(path.join(dir, name), { force: true })
+        } catch {
+          /* 被占用時下次再刪 */
+        }
+      }
+    } catch {
+      /* 目錄不存在 */
+    }
+  }
+
+  /** 已存在的更新檔是否與資產相符：大小、MZ 檔頭，有雜湊時再驗 SHA-256。 */
+  private async updateFileMatches(file: string, asset: UpdateRelease['asset']): Promise<boolean> {
+    try {
+      const st = fs.statSync(file)
+      if (!st.isFile() || st.size !== asset.size) return false
+      const fd = fs.openSync(file, 'r')
+      try {
+        const head = Buffer.alloc(2)
+        fs.readSync(fd, head, 0, 2, 0)
+        if (head.toString('latin1') !== 'MZ') return false
+      } finally {
+        fs.closeSync(fd)
+      }
+      if (!asset.sha256) return true
+      const h = crypto.createHash('sha256')
+      await new Promise<void>((resolve, reject) => {
+        const rs = fs.createReadStream(file)
+        rs.on('data', (c) => h.update(c))
+        rs.on('error', reject)
+        rs.on('end', () => resolve())
+      })
+      return h.digest('hex') === asset.sha256.toLowerCase()
+    } catch {
+      return false
+    }
+  }
+
+  checkUpdate(): Promise<Result> {
+    return this.guard(async () => {
+      if (!this.updateFetch) return fail(t('update.unavailable'), 'UNAVAILABLE')
+      if (this.updateChecking) return fail(t('update.checkBusy'), 'BUSY')
+      this.updateChecking = true
+      this.requestPush()
+      try {
+        const r = await updater.checkForUpdate(
+          this.updateFetch,
+          this.appVersion,
+          !!this.cfg.update_include_prerelease
+        )
+        this.updateLatest = r.latest
+        this.updateAvailable = r.available
+        this.updateError = null
+        await this.afterUpdateCheck()
+      } catch (e) {
+        this.updateError = errMsg(e)
+        this.log('warn', t('log.updateCheckFailed', { error: errMsg(e) }))
+      } finally {
+        this.updateChecking = false
+        this.updateCheckedAt = Math.floor(this.nowSec())
+      }
+      return ok
+    })
+  }
+
+  /** 檢查成功後：通知（每版一次）、清理、還原 ready、狀態機（R-5、R-8）。 */
+  private async afterUpdateCheck(): Promise<void> {
+    const latest = this.updateLatest
+    const avail = this.updateAvailable && !!latest
+    if (avail && latest && latest.version !== this.cfg.update_notified_version) {
+      this.log('info', t('log.updateFound', { version: latest.version }))
+      try {
+        this.notify(t('update.notifyTitle'), t('update.notifyBody', { version: latest.version }))
+      } catch {
+        /* 通知失敗不影響流程 */
+      }
+      try {
+        const next = { ...this.cfg, update_notified_version: latest.version }
+        config.save(next)
+        this.cfg = next
+      } catch {
+        /* 寫不進去下次再通知 */
+      }
+    }
+    // 下載中不動（完成後再用新的 latest 重新比對）
+    if (this.updateDl.state === 'downloading') return
+    const keep = avail && latest ? latest.asset.name : null
+    // ready 的檔案若不是目前 latest 的資產 → 回到 idle
+    if (
+      this.updateDl.state === 'ready' &&
+      (!this.updateFile || path.basename(this.updateFile) !== keep)
+    ) {
+      this.updateDl = { state: 'idle', received: 0, total: 0, error: null }
+      this.updateFile = null
+    }
+    this.cleanupUpdates(keep)
+    // 啟動後第一次檢查：updates/ 已有完整的檔案就直接視為已下載
+    if (!this.updateRestoreTried) {
+      this.updateRestoreTried = true
+      if (avail && latest && this.updateDl.state === 'idle') {
+        const file = path.join(paths.updatesDir(), latest.asset.name)
+        if (fs.existsSync(file) && (await this.updateFileMatches(file, latest.asset))) {
+          this.updateFile = file
+          this.updateDl = {
+            state: 'ready',
+            received: latest.asset.size,
+            total: latest.asset.size,
+            error: null
+          }
+        }
+      }
+    }
+  }
+
+  downloadUpdate(): Promise<Result> {
+    return this.guard(async () => {
+      const release = this.updateLatest
+      if (!this.updateFetch) return fail(t('update.unavailable'), 'UNAVAILABLE')
+      if (!release || !this.updateAvailable) return fail(t('update.noUpdate'), 'INVALID')
+      if (this.updateDl.state === 'downloading') return fail(t('update.downloadBusy'), 'BUSY')
+      if (this.updateDl.state === 'ready') return ok
+      this.cleanupUpdates(release.asset.name)
+      this.updateDl = { state: 'downloading', received: 0, total: release.asset.size, error: null }
+      this.updateLastProgressMs = 0
+      this.log('info', t('log.updateDownloadStarted', { name: release.asset.name }))
+      this.requestPush()
+      try {
+        const file = await updater.downloadAsset(
+          this.updateFetch,
+          release.asset,
+          paths.updatesDir(),
+          (received: number, total: number) => {
+            this.updateDl = {
+              ...this.updateDl,
+              received,
+              total: total > 0 ? total : this.updateDl.total
+            }
+            const nowMs = this.now()
+            if (nowMs - this.updateLastProgressMs >= UPDATE_PROGRESS_MS) {
+              this.updateLastProgressMs = nowMs
+              this.requestPush()
+            }
+          }
+        )
+        const cur = this.updateLatest
+        if (!cur || !this.updateAvailable || cur.asset.name !== release.asset.name) {
+          // 下載期間出現更新的版本：這個檔案不再適用
+          this.updateDl = { state: 'idle', received: 0, total: 0, error: null }
+          this.updateFile = null
+          this.log('warn', t('log.updateStale'))
+          this.cleanupUpdates(cur && this.updateAvailable ? cur.asset.name : null)
+          return ok
+        }
+        this.updateFile = file
+        this.updateDl = {
+          state: 'ready',
+          received: release.asset.size,
+          total: release.asset.size,
+          error: null
+        }
+        this.log('info', t('log.updateDownloaded', { name: release.asset.name }))
+        return ok
+      } catch (e) {
+        this.updateFile = null
+        this.updateDl = { state: 'error', received: 0, total: 0, error: errMsg(e) }
+        this.log('warn', t('log.updateDownloadFailed', { error: errMsg(e) }))
+        return fail(errMsg(e))
+      }
+    })
+  }
+
+  applyUpdate(): Promise<Result> {
+    return this.guard(async () => {
+      const latest = this.updateLatest
+      if (!this.portableExe) return fail(t('update.cannotApply'), 'UNAVAILABLE')
+      if (this.updateDl.state === 'downloading') return fail(t('update.downloadBusy'), 'BUSY')
+      if (this.updateDl.state !== 'ready' || !this.updateFile || !latest) {
+        return fail(t('update.notReady'), 'INVALID')
+      }
+      if (this.switching) return fail(t('update.busySwitching'), 'BUSY')
+      if (!this.spawnDetachedFn || !this.quitAppFn) {
+        return fail(t('update.unavailable'), 'UNAVAILABLE')
+      }
+      if (!fs.existsSync(this.updateFile)) {
+        this.updateDl = { state: 'idle', received: 0, total: 0, error: null }
+        this.updateFile = null
+        return fail(t('update.fileMissing'), 'INVALID')
+      }
+      this.ensureScripts()
+      const script = path.join(paths.binDir(), 'update.ps1')
+      if (!fs.existsSync(script)) return fail(t('update.scriptMissing'), 'UNAVAILABLE')
+      const logFile = path.join(paths.updatesDir(), 'update.log')
+      try {
+        fs.mkdirSync(paths.updatesDir(), { recursive: true })
+        fs.appendFileSync(
+          logFile,
+          `[${new Date(this.now()).toISOString()}] ` +
+            t('log.updateApplyLine', {
+              from: this.appVersion,
+              to: latest.version,
+              target: path.basename(this.portableExe),
+              file: path.basename(this.updateFile)
+            }) +
+            '\n'
+        )
+      } catch {
+        /* log 寫不進去不阻擋更新 */
+      }
+      const waitPids = [...new Set([process.pid, process.ppid])].filter(
+        (n) => Number.isInteger(n) && n > 0
+      )
+      try {
+        // 等子程序確實啟動（spawn 事件）才結束本程式；失敗就保留程式
+        const started = await this.spawnDetachedFn(
+          'powershell.exe',
+          updater.buildApplyArgs({
+            scriptPath: script,
+            waitPids,
+            target: this.portableExe,
+            newFile: this.updateFile,
+            logFile
+          })
+        )
+        if (started === false) {
+          return fail(t('update.applyFailed', { error: 'spawn returned false' }))
+        }
+      } catch (e) {
+        return fail(t('update.applyFailed', { error: errMsg(e) }))
+      }
+      this.log(
+        'info',
+        t('log.updateApplying', {
+          from: this.appVersion,
+          to: latest.version,
+          name: path.basename(this.updateFile)
+        })
+      )
+      this.quitAppFn()
+      return ok
+    })
+  }
+
+  /** 只開最新 release 的頁面；網址必須是 https://github.com/<repo>/ 底下（R-7）。 */
+  openReleasePage(): Promise<Result> {
+    return this.guard(() => {
+      const l = this.updateLatest
+      if (!l) return fail(t('update.noUpdate'), 'INVALID')
+      let valid = false
+      try {
+        const u = new URL(l.htmlUrl)
+        valid =
+          u.protocol === 'https:' &&
+          u.hostname === 'github.com' &&
+          u.pathname.startsWith(`/${updater.UPDATE_REPO}/`)
+      } catch {
+        valid = false
+      }
+      if (!valid) return fail(t('update.badUrl'), 'INVALID')
+      if (!this.openExternalFn) return fail(t('update.unavailable'), 'UNAVAILABLE')
+      this.openExternalFn(l.htmlUrl)
       return ok
     })
   }
@@ -2472,6 +3071,7 @@ export class Controller {
       pending: !!this.cfg.auto_switch && this.monitor.pending,
       usagePolling: this.poller.running,
       lastPollAt: this.lastPollAt,
+      resumeAt: this.resumeAt,
       earliestReset: allExhausted ? switchplan.earliestReset(slots, nowSec) : null,
       config: {
         threshold: Number(this.cfg.threshold),
@@ -2485,12 +3085,18 @@ export class Controller {
         close_to_tray: !!this.cfg.close_to_tray,
         launch_at_login: !!this.cfg.launch_at_login,
         language: config.validateLanguage(this.cfg.language) ?? 'auto',
+        switch_to_earliest: !!this.cfg.switch_to_earliest,
+        routing_enabled: !!this.cfg.routing_enabled,
+        update_check: !!this.cfg.update_check,
+        update_include_prerelease: !!this.cfg.update_include_prerelease,
         auto_compact: {
           ...this.cfg.auto_compact,
           folders: [...this.cfg.auto_compact.folders]
         }
       },
       integration: { installed, needsUpdate, nodeFound: this.node() !== null },
+      routingSetup: this.getRoutingSetup(agyViews.length),
+      update: this.buildUpdateView(),
       clis: this.clis,
       clisScannedAt: this.clisScannedAt,
       login: { ...this.loginView },

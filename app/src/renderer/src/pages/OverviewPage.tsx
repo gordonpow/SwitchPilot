@@ -116,6 +116,7 @@ export function OverviewPage({
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
           <span className="text-pretty">
             {t('overview.allExhausted', { time: formatDateTime(state.earliestReset) })}
+            {state.resumeAt ? ' ' + t('overview.resumeAt', { time: formatDateTime(state.resumeAt) }) : ''}
           </span>
           <Button
             size="xs"

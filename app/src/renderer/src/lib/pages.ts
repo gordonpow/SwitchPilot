@@ -10,6 +10,7 @@ export type Page =
   | 'settings/compact'
   | 'settings/routing'
   | 'settings/integration'
+  | 'settings/update'
 
 export const PAGES: Page[] = [
   'overview',
@@ -22,7 +23,8 @@ export const PAGES: Page[] = [
   'settings/cli',
   'settings/compact',
   'settings/routing',
-  'settings/integration'
+  'settings/integration',
+  'settings/update'
 ]
 
 const STORAGE_KEY = 'switcher.page'

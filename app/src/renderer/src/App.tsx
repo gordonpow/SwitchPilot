@@ -59,6 +59,10 @@ function App(): React.JSX.Element {
     )
   }
 
+  // 功能關閉時「派工」頁不可用，改回總覽（state 未載入時不動）
+  const routingOff = !state.config.routing_enabled
+  if (routingOff && page === 'dispatch') setPage('overview')
+
   const doSwitch = async (a: AccountView, restart: boolean): Promise<void> => {
     await act(window.api.switchTo(a.id, restart), t('app.switchedTo', { name: a.name }))
   }
@@ -81,6 +85,8 @@ function App(): React.JSX.Element {
             accountCount={state.accounts.length + state.agyAccounts.length}
             cliCount={state.clis.length}
             dispatchCount={state.dispatch.running.length}
+            routingEnabled={state.config.routing_enabled}
+            updateAvailable={state.update.available}
           />
           <main className="min-w-0 flex-1 overflow-y-auto p-5">
             {page === 'overview' && <OverviewPage state={state} onNavigate={setPage} />}
@@ -97,9 +103,9 @@ function App(): React.JSX.Element {
               />
             )}
             {page === 'cli' && <CliPage state={state} />}
-            {page === 'dispatch' && <DispatchPage state={state} />}
+            {page === 'dispatch' && !routingOff && <DispatchPage state={state} />}
             {page === 'events' && <EventsPage state={state} />}
-            {page.startsWith('settings/') && <SettingsRouter page={page} state={state} />}
+            {page.startsWith('settings/') && <SettingsRouter page={page} state={state} onNavigate={setPage} />}
           </main>
         </div>
       </div>

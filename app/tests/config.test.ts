@@ -184,3 +184,14 @@ describe('switch_mode', () => {
     expect(config.validateSwitchMode(1)).toBeNull()
   })
 })
+
+describe('config routing_enabled', () => {
+  it('預設 true；非 boolean 回預設；false 保留', () => {
+    expect(config.load().routing_enabled).toBe(true)
+    fs.mkdirSync(paths.appDir(), { recursive: true })
+    fs.writeFileSync(paths.configFile(), JSON.stringify({ routing_enabled: 'no' }))
+    expect(config.load().routing_enabled).toBe(true)
+    fs.writeFileSync(paths.configFile(), JSON.stringify({ routing_enabled: false }))
+    expect(config.load().routing_enabled).toBe(false)
+  })
+})

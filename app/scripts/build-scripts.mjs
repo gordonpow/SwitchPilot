@@ -1,5 +1,5 @@
 import { build } from 'esbuild'
-import { readdirSync, mkdirSync, copyFileSync } from 'node:fs'
+import { readdirSync, mkdirSync, copyFileSync, existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -27,3 +27,15 @@ for (const f of readdirSync(srcDir).filter((f) => f.endsWith('.ps1'))) {
   copyFileSync(join(srcDir, f), join(outDir, f))
   console.log(`copied resources/scripts/${f}`)
 }
+
+// 複製內附 model-routing skill
+const skillSrc = join(root, '..', 'skills', 'model-routing', 'SKILL.md')
+if (!existsSync(skillSrc)) {
+  console.error(`內附 skill 來源檔案不存在：${skillSrc}`)
+  process.exit(1)
+}
+const skillDstDir = join(outDir, 'skills', 'model-routing')
+mkdirSync(skillDstDir, { recursive: true })
+copyFileSync(skillSrc, join(skillDstDir, 'SKILL.md'))
+console.log('copied resources/scripts/skills/model-routing/SKILL.md')
+

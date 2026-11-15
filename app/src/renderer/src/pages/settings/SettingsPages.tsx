@@ -334,6 +334,21 @@ export function SwitchSettingsPage({
       <div className="max-w-2xl space-y-4">
         <AutoSwitchPanel config={config} pending={pending} />
         <Panel>
+          <div className="flex items-center justify-between gap-3 py-3">
+            <div className="space-y-1">
+              <Label htmlFor="switch-to-earliest">{t('settings.switch.earliest')}</Label>
+              <p className="text-xs text-pretty text-muted-foreground">
+                {t('settings.switch.earliestDesc')}
+              </p>
+            </div>
+            <Switch
+              id="switch-to-earliest"
+              checked={config.switch_to_earliest}
+              onCheckedChange={(v) => void act(window.api.setConfig({ switch_to_earliest: v }))}
+            />
+          </div>
+        </Panel>
+        <Panel>
           <div className="space-y-2 py-3">
             <Label>{t('settings.switch.mode')}</Label>
             <Select

@@ -21,6 +21,9 @@ interface Props {
   accountCount: number
   cliCount: number
   dispatchCount?: number
+  routingEnabled?: boolean
+  /** 有新版本：「設定」與「更新」右上角顯示紅點 */
+  updateAvailable?: boolean
 }
 
 const settingsItems: { page: Page; labelKey: MessageKey }[] = [
@@ -29,11 +32,23 @@ const settingsItems: { page: Page; labelKey: MessageKey }[] = [
   { page: 'settings/cli', labelKey: 'nav.settings.cli' },
   { page: 'settings/compact', labelKey: 'nav.settings.compact' },
   { page: 'settings/routing', labelKey: 'nav.settings.routing' },
-  { page: 'settings/integration', labelKey: 'nav.settings.integration' }
+  { page: 'settings/integration', labelKey: 'nav.settings.integration' },
+  { page: 'settings/update', labelKey: 'nav.settings.update' }
 ]
 
 const itemBase =
   'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50'
+
+/** 右上角紅點（窄版導覽也顯示）。 */
+function Dot({ label }: { label: string }): React.JSX.Element {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      className="absolute top-1 right-1.5 size-2 rounded-full bg-red-500"
+    />
+  )
+}
 
 function Item({
   icon: Icon,
@@ -42,7 +57,8 @@ function Item({
   count,
   onClick,
   trailing,
-  expanded
+  expanded,
+  badge
 }: {
   icon?: LucideIcon
   label: string
@@ -51,6 +67,7 @@ function Item({
   onClick: () => void
   trailing?: React.ReactNode
   expanded?: boolean
+  badge?: string
 }): React.JSX.Element {
   const btn = (
     <button
@@ -61,10 +78,11 @@ function Item({
       onClick={onClick}
       className={cn(
         itemBase,
-        'max-[1099px]:justify-center max-[1099px]:px-0',
+        'relative max-[1099px]:justify-center max-[1099px]:px-0',
         active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground'
       )}
     >
+      {badge && <Dot label={badge} />}
       {Icon && <Icon className="size-4 shrink-0" />}
       <span className="min-w-0 flex-1 truncate text-left max-[1099px]:hidden">{label}</span>
       {count !== undefined && (
@@ -83,7 +101,7 @@ function Item({
   )
 }
 
-export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchCount }: Props): React.JSX.Element {
+export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchCount, routingEnabled = true, updateAvailable = false }: Props): React.JSX.Element {
   const t = useT()
   const inSettings = page.startsWith('settings/')
   const [open, setOpen] = useState(inSettings)
@@ -108,6 +126,7 @@ export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchC
         active={page === 'cli'}
         onClick={() => onNavigate('cli')}
       />
+      {routingEnabled && (
       <Item
         icon={Workflow}
         label={t('nav.dispatch')}
@@ -115,6 +134,7 @@ export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchC
         active={page === 'dispatch'}
         onClick={() => onNavigate('dispatch')}
       />
+      )}
       <Item icon={ScrollText} label={t('nav.events')} active={page === 'events'} onClick={() => onNavigate('events')} />
       <div role="separator" className="my-1 border-t" />
       <Item
@@ -122,6 +142,7 @@ export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchC
         label={t('nav.settings')}
         active={false}
         expanded={showSub}
+        badge={updateAvailable ? t('nav.updateBadge') : undefined}
         onClick={() => {
           if (inSettings) setOpen((v) => !v)
           else {
@@ -138,7 +159,7 @@ export function NavSidebar({ page, onNavigate, accountCount, cliCount, dispatchC
       {showSub && (
         <div className="flex flex-col gap-0.5 pl-3 max-[1099px]:pl-0">
           {settingsItems.map((s, i) => (
-            <SubItem key={s.page} short={String(i + 1)} label={t(s.labelKey)} active={page === s.page} onClick={() => onNavigate(s.page)} />
+            <SubItem key={s.page} short={String(i + 1)} label={t(s.labelKey)} active={page === s.page} onClick={() => onNavigate(s.page)} badge={s.page === 'settings/update' && updateAvailable ? t('nav.updateBadge') : undefined} />
           ))}
         </div>
       )}
@@ -150,12 +171,14 @@ function SubItem({
   short,
   label,
   active,
-  onClick
+  onClick,
+  badge
 }: {
   short: string
   label: string
   active: boolean
   onClick: () => void
+  badge?: string
 }): React.JSX.Element {
   return (
     <Tooltip>
@@ -167,10 +190,11 @@ function SubItem({
           onClick={onClick}
           className={cn(
             itemBase,
-            'py-1.5 text-[13px] max-[1099px]:justify-center max-[1099px]:px-0',
+            'relative py-1.5 text-[13px] max-[1099px]:justify-center max-[1099px]:px-0',
             active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground'
           )}
         >
+          {badge && <Dot label={badge} />}
           <span className="truncate max-[1099px]:hidden">{label}</span>
           <span className="hidden text-[11px] font-medium max-[1099px]:inline">{short}</span>
         </button>

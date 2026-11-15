@@ -27,6 +27,9 @@ const api: Api = {
   setConfig: (patch) => ipcRenderer.invoke(IPC.setConfig, patch),
   installIntegration: () => ipcRenderer.invoke(IPC.installIntegration),
   uninstallIntegration: () => ipcRenderer.invoke(IPC.uninstallIntegration),
+  checkRoutingSetup: () => ipcRenderer.invoke(IPC.routingSetupCheck),
+  installSkill: (overwrite) => ipcRenderer.invoke(IPC.installSkill, overwrite),
+  uninstallSkill: () => ipcRenderer.invoke(IPC.uninstallSkill),
   agySaveCurrent: (name) => ipcRenderer.invoke(IPC.agySaveCurrent, name),
   agySwitch: (id) => ipcRenderer.invoke(IPC.agySwitch, id),
   agyRename: (id, name) => ipcRenderer.invoke(IPC.agyRename, id, name),
@@ -35,7 +38,11 @@ const api: Api = {
   agyCancelLogin: () => ipcRenderer.invoke(IPC.agyCancelLogin),
   agyFinishLogin: () => ipcRenderer.invoke(IPC.agyFinishLogin),
   agyRefreshQuota: () => ipcRenderer.invoke(IPC.agyRefreshQuota),
-  setRouting: (r) => ipcRenderer.invoke(IPC.setRouting, r)
+  setRouting: (r) => ipcRenderer.invoke(IPC.setRouting, r),
+  checkUpdate: () => ipcRenderer.invoke(IPC.checkUpdate),
+  downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate),
+  applyUpdate: () => ipcRenderer.invoke(IPC.applyUpdate),
+  openReleasePage: () => ipcRenderer.invoke(IPC.openReleasePage)
 }
 
 if (process.contextIsolated) {
